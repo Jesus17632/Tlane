@@ -16,9 +16,6 @@ struct ContentView: View {
         NavigationStack { InventoryView() }
       }
 
-      Tab("Mi Caja", systemImage: "coloncurrencysign.circle.fill") {
-        NavigationStack { CajaView() }
-      }
     }
     .tint(.tlaneGreen)
   }

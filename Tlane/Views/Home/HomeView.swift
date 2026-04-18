@@ -4,62 +4,115 @@ import SwiftData
 struct HomeView: View {
   @Environment(\.modelContext) private var context
   @State private var viewModel: HomeViewModel?
-  @State private var insightsVM = InsightsViewModel()
+  @State private var mostrarTodasVentas = false
 
   var body: some View {
     ScrollView {
       VStack(spacing: 24) {
         if let viewModel {
-          cajasSection(vm: viewModel)
+          cajaChicaSection(vm: viewModel)
+          botonesSection
           ultimasVentasSection(vm: viewModel)
-          consejeroSection(vm: viewModel)
+          consejeroSection
         }
       }
       .padding(.horizontal)
       .padding(.vertical, 8)
     }
     .background(Color.tlaneBackground)
-    .navigationTitle("Inicio")
-    .task {
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        NavigationLink(destination: CajaView()) {
+          Image(systemName: "person.circle.fill")
+            .font(.title2)
+            .foregroundStyle(Color.tlaneGreen)
+        }
+      }
+    }
+    .onAppear {
       if viewModel == nil {
         viewModel = HomeViewModel(context: context)
       }
-      if let viewModel {
-        await insightsVM.generateIfNeeded(salesSummary: viewModel.salesSummaryForAdvisor)
+    }
+  }
+
+  // MARK: - Caja Chica (alineado al mismo nivel que botón usuario en toolbar)
+  private func cajaChicaSection(vm: HomeViewModel) -> some View {
+    HStack(alignment: .top) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Caja Chica")
+          .font(.largeTitle.weight(.bold))
+          .foregroundStyle(.primary)
+        Text("Hoy")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+        Text(vm.cajaChica.formatted(.currency(code: "MXN")))
+          .font(.largeTitle.weight(.bold))
+          .foregroundStyle(Color.tlaneGreen)
+          .minimumScaleFactor(0.6)
+          .lineLimit(1)
+      }
+      Spacer()
+    }
+    .padding(.top, 4)
+  }
+
+  // MARK: - Botones de acción
+  private var botonesSection: some View {
+    HStack(alignment: .center, spacing: 12) {
+
+      // Botón Caja Grande — alargado, mismo alto que los círculos
+      Button {
+        // acción caja grande
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "plus.circle.fill")
+            .font(.title2.weight(.semibold))
+          Text("Caja Grande")
+            .font(.body.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: 70)
+      }
+      .buttonStyle(.borderedProminent)
+      .tint(Color.tlaneGreen)
+      .cornerRadius(16)
+
+      // Pagar
+      Button {
+        // acción pagar
+      } label: {
+        VStack(spacing: 3) {
+          Image(systemName: "arrow.up")
+            .font(.title3.weight(.bold))
+          Text("Pagar")
+            .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(width: 70, height: 70)
+        .background(Color.blue)
+        .clipShape(Circle())
+      }
+
+      // Cobrar
+      Button {
+        // acción cobrar
+      } label: {
+        VStack(spacing: 3) {
+          Image(systemName: "arrow.down")
+            .font(.title3.weight(.bold))
+          Text("Cobrar")
+            .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(width: 70, height: 70)
+        .background(Color.tlaneGreen)
+        .clipShape(Circle())
       }
     }
   }
 
-  // MARK: - Cajas
-
-  private func cajasSection(vm: HomeViewModel) -> some View {
-    HStack(spacing: 12) {
-      cajaCard(titulo: "Caja Chica", subtitulo: "Hoy",       monto: vm.cajaChica)
-      cajaCard(titulo: "Caja Grande", subtitulo: "Histórico", monto: vm.cajaGrande)
-    }
-  }
-
-  private func cajaCard(titulo: String, subtitulo: String, monto: Decimal) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text(titulo)
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.secondary)
-      Text(subtitulo)
-        .font(.caption)
-        .foregroundStyle(.tertiary)
-      Text(monto.formatted(.currency(code: "MXN")))
-        .font(.largeTitle.weight(.bold))
-        .foregroundStyle(Color.tlaneGreen)
-        .minimumScaleFactor(0.6)
-        .lineLimit(1)
-    }
-    .padding(16)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .glassEffect(in: RoundedRectangle(cornerRadius: 20))
-  }
-
-  // MARK: - Últimas ventas
-
+  // MARK: - Últimas ventas (desplegable)
   private func ultimasVentasSection(vm: HomeViewModel) -> some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Últimas ventas")
@@ -69,8 +122,34 @@ struct HomeView: View {
         emptyVentasRow
       } else {
         VStack(spacing: 8) {
-          ForEach(vm.ultimasVentas) { sale in
+          let visibles = mostrarTodasVentas
+            ? vm.ultimasVentas
+            : Array(vm.ultimasVentas.prefix(3))
+
+          ForEach(visibles) { sale in
             ventaRow(sale: sale)
+          }
+
+          // Botón mostrar más / menos
+          if vm.ultimasVentas.count > 3 {
+            Button {
+              withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                mostrarTodasVentas.toggle()
+              }
+            } label: {
+              HStack(spacing: 6) {
+                Text(mostrarTodasVentas ? "Ver menos" : "Ver más")
+                  .font(.subheadline.weight(.medium))
+                Image(systemName: mostrarTodasVentas
+                      ? "chevron.up"
+                      : "chevron.down")
+                  .font(.caption.weight(.bold))
+              }
+              .foregroundStyle(Color.tlaneGreen)
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 10)
+            }
+            .glassEffect(in: RoundedRectangle(cornerRadius: 12))
           }
         }
       }
@@ -117,17 +196,11 @@ struct HomeView: View {
   }
 
   // MARK: - Consejero
-
-  private func consejeroSection(vm: HomeViewModel) -> some View {
+  private var consejeroSection: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Consejo del día")
         .font(.headline)
-
-      ConsejeroCardView(viewModel: insightsVM) {
-        Task {
-          await insightsVM.generateInsight(salesSummary: vm.salesSummaryForAdvisor)
-        }
-      }
+      FallbackConsejeroCardView()
     }
   }
 }
