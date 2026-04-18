@@ -1,6 +1,11 @@
 import Foundation
 import SwiftData
 
+struct IngresoDia {
+  let dia: Date
+  let total: Decimal
+}
+
 @Observable
 @MainActor
 final class CajaViewModel {
@@ -62,5 +67,20 @@ final class CajaViewModel {
     formatter.locale = Locale(identifier: "es_MX")
     formatter.dateFormat = "LLLL yyyy"
     return formatter.string(from: .now).capitalized
+  }
+
+  /// Ingresos agrupados por día del mes en curso, ordenados cronológicamente.
+  var ingresosPorDia: [IngresoDia] {
+    let calendar = Calendar.current
+    var grupos: [Date: Decimal] = [:]
+
+    for sale in currentMonthSales {
+      let inicio = calendar.startOfDay(for: sale.date)
+      grupos[inicio, default: Decimal(0)] += sale.amount
+    }
+
+    return grupos
+      .map { IngresoDia(dia: $0.key, total: $0.value) }
+      .sorted { $0.dia < $1.dia }
   }
 }
