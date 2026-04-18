@@ -5,21 +5,42 @@ struct HomeView: View {
   @Environment(\.modelContext) private var context
   @State private var viewModel: HomeViewModel?
   @State private var mostrarTodasVentas = false
+  @State private var mostrarChatBot = false
 
   var body: some View {
-    ScrollView {
-      VStack(spacing: 24) {
-        if let viewModel {
-          cajaChicaSection(vm: viewModel)
-          botonesSection
-          ultimasVentasSection(vm: viewModel)
-          consejeroSection
+    ZStack(alignment: .bottomTrailing) {
+      ScrollView {
+        VStack(spacing: 10) {
+          if let viewModel {
+            cajaChicaSection(vm: viewModel)
+            botonesSection
+            ultimasVentasSection(vm: viewModel)
+          }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .padding(.bottom, 90) // espacio para que el FAB no tape contenido
+      }
+      .background(Color.tlaneBackground)
+
+      // MARK: - Botón flotante chatbot
+      Button {
+        mostrarChatBot = true
+      } label: {
+        ZStack {
+          Circle()
+            .fill(Color.tlaneGreen)
+            .frame(width: 60, height: 60)
+            .shadow(color: Color.tlaneGreen.opacity(0.4), radius: 12, x: 0, y: 6)
+
+          Image(systemName: "bubble.left.and.bubble.right.fill")
+            .font(.system(size: 24, weight: .semibold))
+            .foregroundStyle(.white)
         }
       }
-      .padding(.horizontal)
-      .padding(.vertical, 8)
+      .padding(.trailing, 20)
+      .padding(.bottom, 24)
     }
-    .background(Color.tlaneBackground)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         NavigationLink(destination: CajaView()) {
@@ -34,9 +55,13 @@ struct HomeView: View {
         viewModel = HomeViewModel(context: context)
       }
     }
+    .sheet(isPresented: $mostrarChatBot) {
+      //CONSEJERO
+        FallbackConsejeroCardView()
+    }
   }
 
-  // MARK: - Caja Chica (alineado al mismo nivel que botón usuario en toolbar)
+  // MARK: - Caja Chica
   private func cajaChicaSection(vm: HomeViewModel) -> some View {
     HStack(alignment: .top) {
       VStack(alignment: .leading, spacing: 4) {
@@ -59,9 +84,8 @@ struct HomeView: View {
 
   // MARK: - Botones de acción
   private var botonesSection: some View {
-    HStack(alignment: .center, spacing: 12) {
+    HStack(alignment: .center, spacing: 7) {
 
-      // Botón Caja Grande — alargado, mismo alto que los círculos
       Button {
         // acción caja grande
       } label: {
@@ -72,13 +96,27 @@ struct HomeView: View {
             .font(.body.weight(.semibold))
         }
         .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, maxHeight: 70)
+        .frame(maxWidth: .infinity, maxHeight: 40)
       }
       .buttonStyle(.borderedProminent)
-      .tint(Color.tlaneGreen)
+      .tint(Color.blue)
       .cornerRadius(16)
 
-      // Pagar
+      Button {
+        // acción cobrar
+      } label: {
+        VStack(spacing: 2) {
+          Image(systemName: "arrow.down")
+            .font(.title3.weight(.bold))
+          Text("Cobrar")
+            .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(width: 70, height: 55)
+        .background(Color.green)
+        .cornerRadius(50)
+      }
+
       Button {
         // acción pagar
       } label: {
@@ -89,33 +127,17 @@ struct HomeView: View {
             .font(.caption2.weight(.semibold))
         }
         .foregroundStyle(.white)
-        .frame(width: 70, height: 70)
-        .background(Color.blue)
-        .clipShape(Circle())
-      }
-
-      // Cobrar
-      Button {
-        // acción cobrar
-      } label: {
-        VStack(spacing: 3) {
-          Image(systemName: "arrow.down")
-            .font(.title3.weight(.bold))
-          Text("Cobrar")
-            .font(.caption2.weight(.semibold))
-        }
-        .foregroundStyle(.white)
-        .frame(width: 70, height: 70)
-        .background(Color.tlaneGreen)
-        .clipShape(Circle())
+        .frame(width: 70, height: 55)
+        .background(Color.red)
+        .cornerRadius(50)
       }
     }
   }
 
-  // MARK: - Últimas ventas (desplegable)
+  // MARK: - Historial (desplegable)
   private func ultimasVentasSection(vm: HomeViewModel) -> some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Últimas ventas")
+      Text("Historial")
         .font(.headline)
 
       if vm.ultimasVentas.isEmpty {
@@ -124,14 +146,13 @@ struct HomeView: View {
         VStack(spacing: 8) {
           let visibles = mostrarTodasVentas
             ? vm.ultimasVentas
-            : Array(vm.ultimasVentas.prefix(3))
+            : Array(vm.ultimasVentas.prefix(2))
 
           ForEach(visibles) { sale in
             ventaRow(sale: sale)
           }
 
-          // Botón mostrar más / menos
-          if vm.ultimasVentas.count > 3 {
+          if vm.ultimasVentas.count > 2 {
             Button {
               withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 mostrarTodasVentas.toggle()
@@ -140,9 +161,7 @@ struct HomeView: View {
               HStack(spacing: 6) {
                 Text(mostrarTodasVentas ? "Ver menos" : "Ver más")
                   .font(.subheadline.weight(.medium))
-                Image(systemName: mostrarTodasVentas
-                      ? "chevron.up"
-                      : "chevron.down")
+                Image(systemName: mostrarTodasVentas ? "chevron.up" : "chevron.down")
                   .font(.caption.weight(.bold))
               }
               .foregroundStyle(Color.tlaneGreen)
@@ -193,15 +212,6 @@ struct HomeView: View {
     }
     .padding(12)
     .glassEffect(in: RoundedRectangle(cornerRadius: 14))
-  }
-
-  // MARK: - Consejero
-  private var consejeroSection: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Consejo del día")
-        .font(.headline)
-      FallbackConsejeroCardView()
-    }
   }
 }
 
