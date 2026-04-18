@@ -32,11 +32,16 @@ final class InventoryViewModel {
       .reduce(Decimal(0)) { $0 + $1.price }
   }
 
-  func addProduct(name: String, category: String, price: Decimal) {
-    let product = Product(name: name, category: category, price: price)
-    context.insert(product)
-    try? context.save()
-  }
+    func addProduct(name: String, category: String, price: Decimal, imageData: Data?) {
+      let product = Product(
+        name: name,
+        category: category,
+        price: price,
+        imageData: imageData
+      )
+      context.insert(product)
+      try? context.save()
+    }
 
   func delete(product: Product) {
     context.delete(product)

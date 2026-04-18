@@ -51,9 +51,14 @@ struct InventoryView: View {
       get: { vm.isShowingAddProduct },
       set: { vm.isShowingAddProduct = $0 }
     )) {
-      AddProductView { name, category, price in
-        vm.addProduct(name: name, category: category, price: price)
-      }
+        AddProductView { name, category, price, imageData in
+          vm.addProduct(
+            name: name,
+            category: category,
+            price: price,
+            imageData: imageData
+          )
+        }
     }
   }
 
