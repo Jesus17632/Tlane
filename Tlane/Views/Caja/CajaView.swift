@@ -1,9 +1,10 @@
-//Cambiar a USER VIEW
+// Renombrado de CajaView → UserView
 
 import SwiftUI
 import SwiftData
+import Charts
 
-struct CajaView: View {
+struct UserView: View {
   @Environment(\.modelContext) private var context
   @State private var viewModel: CajaViewModel?
 
@@ -17,7 +18,7 @@ struct CajaView: View {
         ProgressView()
       }
     }
-    .navigationTitle("Mi Caja")
+    .navigationTitle("Mi Perfil")
     .onAppear {
       if viewModel == nil {
         viewModel = CajaViewModel(context: context)
@@ -29,13 +30,44 @@ struct CajaView: View {
   private func content(vm: CajaViewModel) -> some View {
     ScrollView {
       VStack(spacing: 20) {
+        avatarSection
         totalCard(vm: vm)
+        ingresosChart(vm: vm)
         desgloseSection(vm: vm)
         operacionesCard(vm: vm)
         historicoPlaceholder
       }
       .padding()
     }
+  }
+
+  // MARK: - Avatar
+
+  private var avatarSection: some View {
+    VStack(spacing: 10) {
+      ZStack {
+        Circle()
+          .fill(Color.tlaneGreen.opacity(0.15))
+          .frame(width: 90, height: 90)
+
+        Circle()
+          .strokeBorder(Color.tlaneGreen.opacity(0.4), lineWidth: 2)
+          .frame(width: 90, height: 90)
+
+        Image(systemName: "person.crop.circle.fill")
+          .font(.system(size: 64))
+          .foregroundStyle(Color.tlaneGreen)
+      }
+
+      Text("Mi cuenta")
+        .font(.title2.weight(.bold))
+
+      Text("Vendedor independiente")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 8)
   }
 
   // MARK: - Total del mes
@@ -57,6 +89,59 @@ struct CajaView: View {
     }
     .padding(20)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .glassEffect(in: RoundedRectangle(cornerRadius: 20))
+  }
+
+  // MARK: - Gráfica ingresos por día
+
+  private func ingresosChart(vm: CajaViewModel) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Ingresos por día")
+        .font(.headline)
+
+      if vm.ingresosPorDia.isEmpty {
+        HStack {
+          Image(systemName: "chart.bar.xaxis")
+            .foregroundStyle(.secondary)
+          Text("Sin datos este mes")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+      } else {
+        Chart {
+          ForEach(vm.ingresosPorDia, id: \.dia) { punto in
+            BarMark(
+              x: .value("Día", punto.dia, unit: .day),
+              y: .value("Ingreso", punto.total as Decimal)
+            )
+            .foregroundStyle(Color.tlaneGreen.gradient)
+            .cornerRadius(4)
+          }
+        }
+        .chartXAxis {
+          AxisMarks(values: .stride(by: .day, count: 5)) { value in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
+            AxisValueLabel(format: .dateTime.day())
+              .font(.caption2)
+          }
+        }
+        .chartYAxis {
+          AxisMarks { value in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
+            AxisValueLabel {
+              if let d = value.as(Double.self) {
+                Text("$\(Int(d))")
+                  .font(.caption2)
+              }
+            }
+          }
+        }
+        .frame(height: 180)
+      }
+    }
+    .padding(16)
     .glassEffect(in: RoundedRectangle(cornerRadius: 20))
   }
 
@@ -110,7 +195,6 @@ struct CajaView: View {
           .foregroundStyle(color)
       }
 
-      // Barra de progreso
       GeometryReader { geo in
         ZStack(alignment: .leading) {
           RoundedRectangle(cornerRadius: 4)
@@ -172,7 +256,7 @@ struct CajaView: View {
 
 #Preview {
   NavigationStack {
-    CajaView()
+    UserView()
   }
   .modelContainer(AppContainer.preview)
 }
