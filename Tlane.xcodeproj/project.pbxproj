@@ -11,6 +11,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		7C8789DE2F942E5200504E7D /* Components */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Components;
+			sourceTree = "<group>";
+		};
+		7C8789E32F942E9700504E7D /* Payments */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Payments;
+			sourceTree = "<group>";
+		};
 		7CB9953A2F9416E300CC9477 /* Tlane */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Tlane;
@@ -34,6 +44,8 @@
 			children = (
 				7CB9953A2F9416E300CC9477 /* Tlane */,
 				7CB995392F9416E300CC9477 /* Products */,
+				7C8789DE2F942E5200504E7D /* Components */,
+				7C8789E32F942E9700504E7D /* Payments */,
 			);
 			sourceTree = "<group>";
 		};
@@ -61,6 +73,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				7C8789DE2F942E5200504E7D /* Components */,
+				7C8789E32F942E9700504E7D /* Payments */,
 				7CB9953A2F9416E300CC9477 /* Tlane */,
 			);
 			name = Tlane;
