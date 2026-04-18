@@ -1,16 +1,52 @@
 import SwiftUI
 
-/// Placeholder. En el paso 6 este view consumirá InsightsViewModel
-/// con el SalesInsight generado por FoundationModels.
-/// Por ahora redirige al Fallback para que HomeView funcione.
 struct ConsejeroCardView: View {
+  @Bindable var viewModel: InsightsViewModel
+  let onRefresh: () -> Void
+
   var body: some View {
-    FallbackConsejeroCardView()
+    VStack(spacing: 12) {
+      // Estado visual principal
+      if viewModel.isLoading {
+        ConsejeroCardContent(
+          mainAdvice: "",
+          reasoning: "",
+          suggestedAction: "",
+          isLoading: true
+        )
+      } else if let insight = viewModel.insight, !viewModel.usedFallback {
+        ConsejeroCardContent(
+          mainAdvice: insight.mainAdvice,
+          reasoning: insight.reasoning,
+          suggestedAction: insight.suggestedAction,
+          isLoading: false
+        )
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+      } else {
+        // Fallback: ya sea porque Apple Intelligence no está disponible
+        // o porque hubo un error de generación.
+        FallbackConsejeroCardView()
+      }
+
+      // Botón de refresh — deshabilitado mientras carga
+      Button {
+        onRefresh()
+      } label: {
+        Label("Actualizar consejo", systemImage: "arrow.clockwise")
+          .font(.caption.weight(.semibold))
+      }
+      .buttonStyle(.bordered)
+      .tint(.tlaneGreen)
+      .disabled(viewModel.isLoading)
+    }
+    .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
+    .animation(.easeInOut(duration: 0.3), value: viewModel.usedFallback)
   }
 }
 
 #Preview {
-  ConsejeroCardView()
+  let vm = InsightsViewModel()
+  return ConsejeroCardView(viewModel: vm, onRefresh: {})
     .padding()
     .background(Color.tlaneBackground)
 }

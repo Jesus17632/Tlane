@@ -4,6 +4,7 @@ import SwiftData
 struct HomeView: View {
   @Environment(\.modelContext) private var context
   @State private var viewModel: HomeViewModel?
+  @State private var insightsVM = InsightsViewModel()
 
   var body: some View {
     ScrollView {
@@ -11,7 +12,7 @@ struct HomeView: View {
         if let viewModel {
           cajasSection(vm: viewModel)
           ultimasVentasSection(vm: viewModel)
-          consejeroSection
+          consejeroSection(vm: viewModel)
         }
       }
       .padding(.horizontal)
@@ -19,9 +20,12 @@ struct HomeView: View {
     }
     .background(Color.tlaneBackground)
     .navigationTitle("Inicio")
-    .onAppear {
+    .task {
       if viewModel == nil {
         viewModel = HomeViewModel(context: context)
+      }
+      if let viewModel {
+        await insightsVM.generateIfNeeded(salesSummary: viewModel.salesSummaryForAdvisor)
       }
     }
   }
@@ -30,16 +34,8 @@ struct HomeView: View {
 
   private func cajasSection(vm: HomeViewModel) -> some View {
     HStack(spacing: 12) {
-      cajaCard(
-        titulo: "Caja Chica",
-        subtitulo: "Hoy",
-        monto: vm.cajaChica
-      )
-      cajaCard(
-        titulo: "Caja Grande",
-        subtitulo: "Histórico",
-        monto: vm.cajaGrande
-      )
+      cajaCard(titulo: "Caja Chica", subtitulo: "Hoy",       monto: vm.cajaChica)
+      cajaCard(titulo: "Caja Grande", subtitulo: "Histórico", monto: vm.cajaGrande)
     }
   }
 
@@ -122,12 +118,16 @@ struct HomeView: View {
 
   // MARK: - Consejero
 
-  private var consejeroSection: some View {
+  private func consejeroSection(vm: HomeViewModel) -> some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Consejo del día")
         .font(.headline)
 
-      ConsejeroCardView()
+      ConsejeroCardView(viewModel: insightsVM) {
+        Task {
+          await insightsVM.generateInsight(salesSummary: vm.salesSummaryForAdvisor)
+        }
+      }
     }
   }
 }
