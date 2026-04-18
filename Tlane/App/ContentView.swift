@@ -7,13 +7,14 @@ struct ContentView: View {
       Tab("Inicio", systemImage: "house.fill") {
         NavigationStack { HomeView() }
       }
+        
+    Tab("Escanear", systemImage: "camera.fill") {
+        NavigationStack { InventoryView() }
+        }
 
-      Tab("Cobrar", systemImage: "camera.fill") {
-        NavigationStack { CaptureView() }
-      }
 
       Tab("Inventario", systemImage: "square.grid.2x2.fill") {
-        NavigationStack { InventoryView() }
+        NavigationStack { CaptureView() }
       }
 
     }
