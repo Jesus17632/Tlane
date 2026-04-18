@@ -10,20 +10,23 @@ struct CaptureView: View {
     GridItem(.flexible(), spacing: 12)
   ]
 
-  var body: some View {
-    Group {
-      if let viewModel {
-        content(vm: viewModel)
+    var body: some View {
+      ZStack {
+        Color.tlaneBackground.ignoresSafeArea()
+
+        if let viewModel {
+          content(vm: viewModel)
+        } else {
+          ProgressView()
+        }
+      }
+      .navigationTitle("Cobrar")
+      .onAppear {
+        if viewModel == nil {
+          viewModel = CaptureViewModel(context: context)
+        }
       }
     }
-    .background(Color.tlaneBackground)
-    .navigationTitle("Cobrar")
-    .onAppear {
-      if viewModel == nil {
-        viewModel = CaptureViewModel(context: context)
-      }
-    }
-  }
 
   @ViewBuilder
   private func content(vm: CaptureViewModel) -> some View {
