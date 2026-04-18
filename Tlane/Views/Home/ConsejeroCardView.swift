@@ -9,6 +9,7 @@ struct ConsejeroCardView: View {
       // Estado visual principal
       if viewModel.isLoading {
         ConsejeroCardContent(
+          icon: "sparkles",
           mainAdvice: "",
           reasoning: "",
           suggestedAction: "",
@@ -16,6 +17,7 @@ struct ConsejeroCardView: View {
         )
       } else if let insight = viewModel.insight, !viewModel.usedFallback {
         ConsejeroCardContent(
+          icon: "sparkles",
           mainAdvice: insight.mainAdvice,
           reasoning: insight.reasoning,
           suggestedAction: insight.suggestedAction,

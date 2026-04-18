@@ -1,23 +1,24 @@
 import SwiftUI
 
 struct FallbackConsejeroCardView: View {
-  /// Los consejos rotan según el día del año para que en demos
-  /// sucesivos no aparezca siempre el mismo.
   private static let consejos: [FallbackAdvice] = [
     FallbackAdvice(
+      icon: "sun.max.fill",
       mainAdvice: "Los días soleados aumentan el flujo en el mercado.",
       reasoning: "La gente pasea más y se detiene en puestos con piezas visibles desde lejos.",
-      suggestedAction: "Colocar tus piezas más coloridas al frente."
+      suggestedAction: "Coloca tus piezas más coloridas al frente hoy."
     ),
     FallbackAdvice(
+      icon: "calendar.badge.clock",
       mainAdvice: "Tus ventas del fin de semana suelen duplicar las de entre semana.",
       reasoning: "Sábados y domingos concentran a turistas y familias que pagan en efectivo.",
-      suggestedAction: "Llevar cambio suficiente en billetes de $50 y $100."
+      suggestedAction: "Lleva cambio suficiente en billetes de $50 y $100."
     ),
     FallbackAdvice(
+      icon: "sparkles",
       mainAdvice: "Las piezas únicas se venden mejor con una historia detrás.",
       reasoning: "Los compradores de artesanía valoran el origen y quién la hizo.",
-      suggestedAction: "Anotar en el inventario una frase corta sobre cada pieza."
+      suggestedAction: "Anota una frase corta sobre el origen de cada pieza."
     )
   ]
 
@@ -28,6 +29,7 @@ struct FallbackConsejeroCardView: View {
 
   var body: some View {
     ConsejeroCardContent(
+      icon: adviceOfTheDay.icon,
       mainAdvice: adviceOfTheDay.mainAdvice,
       reasoning: adviceOfTheDay.reasoning,
       suggestedAction: adviceOfTheDay.suggestedAction,
@@ -37,64 +39,80 @@ struct FallbackConsejeroCardView: View {
 }
 
 private struct FallbackAdvice {
+  let icon: String
   let mainAdvice: String
   let reasoning: String
   let suggestedAction: String
 }
 
-/// Contenido compartido entre FallbackConsejeroCardView y el ConsejeroCardView real.
-/// Cuando conectemos Apple Intelligence reutilizamos esta misma vista.
 struct ConsejeroCardContent: View {
+  let icon: String
   let mainAdvice: String
   let reasoning: String
   let suggestedAction: String
   let isLoading: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(spacing: 10) {
-        Image(systemName: "sparkles")
-          .font(.title2)
-          .foregroundStyle(.white)
-        Text("El Consejero")
-          .font(.headline)
-          .foregroundStyle(.white)
-        Spacer()
+    VStack(alignment: .leading, spacing: 0) {
+
+      // — Header pill
+      HStack(spacing: 6) {
+        Image(systemName: icon)
+          .font(.caption.weight(.bold))
+          .foregroundStyle(Color.tlaneGreen)
+        Text("Consejo del día")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(Color.tlaneGreen)
       }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 5)
+      .background(Color.tlaneGreen.opacity(0.12), in: Capsule())
+      .padding(.bottom, 14)
 
       if isLoading {
         HStack(spacing: 10) {
           ProgressView()
-            .tint(.white)
-          Text("El Consejero está pensando…")
+            .tint(Color.tlaneGreen)
+          Text("Pensando…")
             .font(.subheadline)
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(.secondary)
         }
+        .padding(.bottom, 8)
       } else {
-        VStack(alignment: .leading, spacing: 12) {
-          Text(mainAdvice)
-            .font(.title3.weight(.semibold))
-            .foregroundStyle(.white)
+        // — Consejo principal
+        Text(mainAdvice)
+          .font(.system(.title3, design: .rounded, weight: .bold))
+          .foregroundStyle(.primary)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.bottom, 10)
 
-          Text(reasoning)
-            .font(.subheadline)
-            .foregroundStyle(.white.opacity(0.85))
+        // — Razón
+        Text(reasoning)
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.bottom, 14)
 
-          HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "arrow.right.circle.fill")
-              .foregroundStyle(.white.opacity(0.9))
-            Text(suggestedAction)
-              .font(.subheadline.weight(.medium))
-              .foregroundStyle(.white)
-          }
-          .padding(.top, 4)
+        // — Acción sugerida
+        HStack(alignment: .top, spacing: 10) {
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Color.tlaneGreen)
+            .frame(width: 3)
+            .frame(maxHeight: .infinity)
+
+          Text(suggestedAction)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
         }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(10)
+        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
       }
     }
-    .padding(20)
+    .padding(18)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color.tlaneGreen)
-    .clipShape(RoundedRectangle(cornerRadius: 20))
+    .glassEffect(in: RoundedRectangle(cornerRadius: 20))
   }
 }
 

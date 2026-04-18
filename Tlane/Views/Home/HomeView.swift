@@ -23,9 +23,50 @@ struct HomeView: View {
       }
       .background(Color.tlaneBackground)
 
+      // MARK: - Popup flotante chatbot
+      if mostrarChatBot {
+        VStack(alignment: .leading, spacing: 0) {
+          HStack {
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+              .foregroundStyle(Color.tlaneGreen)
+            Text("Asistente")
+              .font(.headline)
+            Spacer()
+            Button {
+              withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                mostrarChatBot = false
+              }
+            } label: {
+              Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+                .font(.title3)
+            }
+          }
+          .padding(.horizontal, 16)
+          .padding(.top, 14)
+          .padding(.bottom, 10)
+
+          Divider()
+
+          FallbackConsejeroCardView()
+            .padding(12)
+        }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.18), radius: 20, x: 0, y: 8)
+        .frame(width: 300)
+        .padding(.trailing, 20)
+        .padding(.bottom, 94)
+        .transition(.asymmetric(
+          insertion: .scale(scale: 0.85, anchor: .bottomTrailing).combined(with: .opacity),
+          removal:   .scale(scale: 0.85, anchor: .bottomTrailing).combined(with: .opacity)
+        ))
+      }
+
       // MARK: - Botón flotante chatbot
       Button {
-        mostrarChatBot = true
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+          mostrarChatBot.toggle()
+        }
       } label: {
         ZStack {
           Circle()
@@ -33,9 +74,12 @@ struct HomeView: View {
             .frame(width: 60, height: 60)
             .shadow(color: Color.tlaneGreen.opacity(0.4), radius: 12, x: 0, y: 6)
 
-          Image(systemName: "bubble.left.and.bubble.right.fill")
-            .font(.system(size: 24, weight: .semibold))
+          Image(systemName: mostrarChatBot
+                ? "xmark"
+                : "bubble.left.and.bubble.right.fill")
+            .font(.system(size: 22, weight: .semibold))
             .foregroundStyle(.white)
+            .animation(.spring(response: 0.3), value: mostrarChatBot)
         }
       }
       .padding(.trailing, 20)
@@ -54,10 +98,6 @@ struct HomeView: View {
       if viewModel == nil {
         viewModel = HomeViewModel(context: context)
       }
-    }
-    .sheet(isPresented: $mostrarChatBot) {
-      //CONSEJERO
-        FallbackConsejeroCardView()
     }
   }
 
@@ -146,13 +186,13 @@ struct HomeView: View {
         VStack(spacing: 8) {
           let visibles = mostrarTodasVentas
             ? vm.ultimasVentas
-            : Array(vm.ultimasVentas.prefix(2))
+            : Array(vm.ultimasVentas.prefix(3))
 
           ForEach(visibles) { sale in
             ventaRow(sale: sale)
           }
 
-          if vm.ultimasVentas.count > 2 {
+          if vm.ultimasVentas.count > 3 {
             Button {
               withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 mostrarTodasVentas.toggle()
