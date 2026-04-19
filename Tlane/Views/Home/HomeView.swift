@@ -6,6 +6,9 @@ struct HomeView: View {
   @State private var viewModel: HomeViewModel?
   @State private var mostrarTodasVentas = false
   @State private var mostrarChatBot = false
+  @State private var mostrarPagar = false
+  @State private var mostrarCobrar = false
+  @State private var mostrarCajaGrande = false
 
   var body: some View {
     ZStack(alignment: .bottomTrailing) {
@@ -19,7 +22,7 @@ struct HomeView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .padding(.bottom, 90) // espacio para que el FAB no tape contenido
+        .padding(.bottom, 90)
       }
       .background(Color.tlaneBackground)
 
@@ -99,6 +102,17 @@ struct HomeView: View {
         viewModel = HomeViewModel(context: context)
       }
     }
+    .sheet(isPresented: $mostrarCajaGrande) {
+      CajaGrandeView()
+    }
+    .sheet(isPresented: $mostrarCobrar) {
+      CobrarSheetView { monto, tipo in
+        // viewModel?.registrarVenta(monto: monto, metodo: tipo.rawValue)
+      }
+    }
+    .sheet(isPresented: $mostrarPagar) {
+      PagarSheetView()
+    }
   }
 
   // MARK: - Caja Chica
@@ -127,7 +141,7 @@ struct HomeView: View {
     HStack(alignment: .center, spacing: 7) {
 
       Button {
-        // acción caja grande
+        mostrarCajaGrande = true
       } label: {
         HStack(spacing: 8) {
           Image(systemName: "plus.circle.fill")
@@ -143,7 +157,7 @@ struct HomeView: View {
       .cornerRadius(16)
 
       Button {
-        // acción cobrar
+        mostrarCobrar = true
       } label: {
         VStack(spacing: 2) {
           Image(systemName: "arrow.down")
@@ -158,7 +172,7 @@ struct HomeView: View {
       }
 
       Button {
-        // acción pagar
+        mostrarPagar = true
       } label: {
         VStack(spacing: 3) {
           Image(systemName: "arrow.up")
