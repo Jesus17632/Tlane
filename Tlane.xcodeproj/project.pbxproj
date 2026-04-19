@@ -262,7 +262,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 22FTUTSK95;
+				DEVELOPMENT_TEAM = 8VQQ7RA9NZ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -270,6 +270,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Tlane/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Tlane usa la cámara para fotografiar tus piezas y sugerir categorías automáticamente.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Para hacerle preguntas al consejero por voz";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Para transcribir tu pregunta al consejero";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -286,7 +288,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Developer.Tlane;
+				PRODUCT_BUNDLE_IDENTIFIER = artemio.tlane;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -310,7 +312,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 22FTUTSK95;
+				DEVELOPMENT_TEAM = 8VQQ7RA9NZ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -318,6 +320,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Tlane/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Tlane usa la cámara para fotografiar tus piezas y sugerir categorías automáticamente.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Para hacerle preguntas al consejero por voz";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Para transcribir tu pregunta al consejero";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -334,7 +338,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Developer.Tlane;
+				PRODUCT_BUNDLE_IDENTIFIER = artemio.tlane;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
