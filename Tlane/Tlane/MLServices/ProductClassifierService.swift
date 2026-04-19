@@ -24,9 +24,9 @@ struct ProductClassifierService {
   /// Mapa de nombre-de-carpeta → categoría Tlane que muestra la UI.
   /// Cambia estos según los nombres reales de tus carpetas en Create ML.
   private let labelToCategory: [String: String] = [
-    "piramide":   "Pirámide de Yeso",
-    "llavero":  "Llavero de Perro",
-    "tortuga":  "Tortuga de Onix",
+    "piramide":  "Escultura de Piedra",
+    "llavero":  "Llavero",
+    "tortuga":  "Escultura de Onix",
     "otro":     "otro"
   ]
 
