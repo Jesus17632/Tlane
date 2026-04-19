@@ -92,8 +92,8 @@ struct HomeView: View {
       ToolbarItem(placement: .topBarTrailing) {
         NavigationLink(destination: CajaView()) {
           Image(systemName: "person.circle.fill")
-            .font(.title2)
-            .foregroundStyle(Color.tlaneGreen)
+            .font(.title)
+            .foregroundStyle(Color.black)
         }
       }
     }
@@ -116,11 +116,10 @@ struct HomeView: View {
   // MARK: - Caja Chica
   private func cajaChicaSection(vm: HomeViewModel) -> some View {
     HStack(alignment: .top) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text("Caja Chica")
-          .font(.largeTitle.weight(.bold))
+      VStack(alignment: .leading, spacing: 5) {
+        Text("Total del día:")
+          .font(.system(size: 20, weight: .bold))
           .foregroundStyle(.primary)
-        Text("Hoy")
           .font(.caption)
           .foregroundStyle(.tertiary)
         Text(vm.cajaChica.formatted(.currency(code: "MXN")))
@@ -188,7 +187,7 @@ struct HomeView: View {
 
   // MARK: - Historial (desplegable)
   private func ultimasVentasSection(vm: HomeViewModel) -> some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 10) {
       Text("Historial")
         .font(.headline)
 
@@ -287,7 +286,7 @@ struct HomeView: View {
           .foregroundStyle(.secondary)
       }
     }
-    .padding(12)
+    .padding(10)
     .glassEffect(in: RoundedRectangle(cornerRadius: 14))
   }
 }
