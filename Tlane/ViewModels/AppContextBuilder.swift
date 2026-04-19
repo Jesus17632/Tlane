@@ -9,25 +9,27 @@ import SwiftData
 
 struct AppContextBuilder {
 
-    // MARK: - Punto de entrada principal
-
     static func build(context: ModelContext) -> String {
         let sales    = fetchSales(context: context)
         let products = fetchProducts(context: context)
 
-        let now      = Date.now
-        let calendar = Calendar.current
-        let hour     = calendar.component(.hour, from: now)
-        let weekday  = calendar.component(.weekday, from: now)
+        print("🔍 DEBUG AppContextBuilder:")
+        print("   Sales fetched: \(sales.count)")
+        print("   Products fetched: \(products.count)")
+
+        let now       = Date.now
+        let calendar  = Calendar.current
+        let hour      = calendar.component(.hour, from: now)
+        let weekday   = calendar.component(.weekday, from: now)
         let isWeekend = weekday == 1 || weekday == 7
 
         let todaySales  = sales.filter { calendar.isDateInToday($0.date) }
         let weekSales   = sales.filter { calendar.isDate($0.date, equalTo: now, toGranularity: .weekOfYear) }
         let monthSales  = sales.filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }
 
-        let todayTotal  = todaySales.reduce(Decimal(0))  { $0 + $1.amount }
-        let weekTotal   = weekSales.reduce(Decimal(0))   { $0 + $1.amount }
-        let monthTotal  = monthSales.reduce(Decimal(0))  { $0 + $1.amount }
+        let todayTotal  = todaySales.reduce(Decimal(0)) { $0 + $1.amount }
+        let weekTotal   = weekSales.reduce(Decimal(0))  { $0 + $1.amount }
+        let monthTotal  = monthSales.reduce(Decimal(0)) { $0 + $1.amount }
 
         let topProducts = topSellingProducts(from: weekSales, products: products)
         let activeProds = products.filter { $0.currentStock > 0 }
@@ -36,7 +38,7 @@ struct AppContextBuilder {
         let cashCount    = todaySales.filter { $0.paymentMethod == .cash }.count
         let digitalCount = todaySales.filter { $0.paymentMethod == .digital }.count
 
-        return """
+        let result = """
         === CONTEXTO DEL NEGOCIO ===
         Fecha y hora: \(formattedDate(now)), \(hour):00 hrs (\(isWeekend ? "fin de semana" : "día entre semana"))
 
@@ -58,12 +60,12 @@ struct AppContextBuilder {
         \(categorySummary(products: activeProds))
         === FIN DE CONTEXTO ===
         """
+
+        print("📊 CONTEXTO COMPLETO:\n\(result)")
+        return result
     }
 
-    // MARK: - Helpers privados
-
     private static func fetchSales(context: ModelContext) -> [Sale] {
-        // Solo últimos 30 días para no sobrecargar el contexto
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: .now) ?? .now
         let descriptor = FetchDescriptor<Sale>(
             predicate: #Predicate { $0.date >= cutoff },
@@ -80,7 +82,6 @@ struct AppContextBuilder {
     }
 
     private static func topSellingProducts(from sales: [Sale], products: [Product]) -> String {
-        // Cuenta cuántas veces aparece cada productId en los SaleItems
         var counts: [UUID: (name: String, qty: Int, revenue: Decimal)] = [:]
         for sale in sales {
             for item in sale.items {
