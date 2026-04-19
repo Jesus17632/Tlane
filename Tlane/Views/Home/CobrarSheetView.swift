@@ -6,6 +6,7 @@
 //
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 // MARK: - Modelo del carrito
 
@@ -20,22 +21,23 @@ struct ItemCarrito: Identifiable {
 
 struct CobrarSheetView: View {
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss)      private var dismiss
 
     let onVentaRegistrada: (Decimal, TipoCobro) -> Void
 
-    // Pasos: 1 = productos, 2 = tipo cobro, 3 = simulación
     @State private var paso: Int = 1
     @State private var carrito: [ItemCarrito] = []
     @State private var tipoSeleccionado: TipoCobro? = nil
     @State private var estadoSimulacion: EstadoSim = .esperando
     @State private var mostrarExito = false
     @State private var busqueda: String = ""
+    @State private var pasoAnterior: Int = 1
+    @State private var pulseTotal = false
 
     enum EstadoSim { case esperando, procesando, aprobado }
 
     private var productos: [Product] {
-        let predicate = #Predicate<Product> { $0.currentStock > 0 }
+        let predicate  = #Predicate<Product> { $0.currentStock > 0 }
         let descriptor = FetchDescriptor<Product>(
             predicate: predicate,
             sortBy: [SortDescriptor(\.name)]
@@ -44,22 +46,34 @@ struct CobrarSheetView: View {
     }
 
     private var productosFiltrados: [Product] {
-        if busqueda.isEmpty { return productos }
-        return productos.filter {
+        busqueda.isEmpty ? productos : productos.filter {
             $0.name.localizedCaseInsensitiveContains(busqueda)
         }
     }
 
     private var totalCarrito: Decimal {
-        carrito.reduce(Decimal(0)) { $0 + $1.subtotal }
+        carrito.reduce(.zero) { $0 + $1.subtotal }
     }
-
     private var carritoVacio: Bool { carrito.isEmpty }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ZStack {
+                // Fondo degradado sutil
+                LinearGradient(
+                    colors: [
+                        Color(.systemGroupedBackground),
+                        Color.tlaneGreen.opacity(0.04)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
                 mainContent
+
                 if mostrarExito { overlayExito }
             }
             .navigationTitle(tituloNavegacion)
@@ -67,11 +81,12 @@ struct CobrarSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancelar") { dismiss() }
+                        .foregroundStyle(.secondary)
                 }
                 if paso > 1 {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            withAnimation(.spring(response: 0.35)) { paso -= 1 }
+                            avanzar(a: paso - 1)
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
@@ -82,14 +97,15 @@ struct CobrarSheetView: View {
                 }
             }
         }
+        .task { await pedirPermisoNotificaciones() }
     }
 
     private var tituloNavegacion: String {
         switch paso {
-        case 1: return "Seleccionar productos"
-        case 2: return "Forma de cobro"
-        case 3: return "Cobrar"
-        default: return "Cobrar"
+        case 1:  "Seleccionar productos"
+        case 2:  "Forma de cobro"
+        case 3:  "Cobrar"
+        default: "Cobrar"
         }
     }
 
@@ -103,67 +119,107 @@ struct CobrarSheetView: View {
                 VStack(spacing: 20) {
                     switch paso {
                     case 1: paso1Productos
+                        .transition(transicion(hacia: paso))
                     case 2: paso2TipoCobro
+                        .transition(transicion(hacia: paso))
                     case 3: paso3Simulacion
+                        .transition(transicion(hacia: paso))
                     default: EmptyView()
                     }
                 }
                 .padding(20)
+                .animation(.spring(response: 0.42, dampingFraction: 0.82), value: paso)
             }
 
             if paso < 3 {
                 botonAccion
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
-                    .background(Color(.systemGroupedBackground))
+                    .background(
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 20,
+                            topTrailingRadius: 20
+                        )
+                        .fill(Color(.systemGroupedBackground))
+                        .shadow(color: .black.opacity(0.06), radius: 12, y: -4)
+                    )
             }
         }
-        .background(Color(.systemGroupedBackground))
+    }
+
+    // Dirección de la transición según avance/retroceso
+    private func transicion(hacia nuevoPaso: Int) -> AnyTransition {
+        let direction: Edge = nuevoPaso >= pasoAnterior ? .trailing : .leading
+        return .asymmetric(
+            insertion: .move(edge: direction).combined(with: .opacity),
+            removal:   .move(edge: direction == .trailing ? .leading : .trailing).combined(with: .opacity)
+        )
+    }
+
+    private func avanzar(a nuevoPaso: Int) {
+        pasoAnterior = paso
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+            paso = nuevoPaso
+        }
     }
 
     // MARK: - Indicador de pasos
 
     private var stepIndicator: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             ForEach(1...3, id: \.self) { n in
-                Capsule()
-                    .fill(n <= paso ? Color.tlaneGreen : Color(.systemGray5))
-                    .frame(maxWidth: .infinity, maxHeight: 4)
-                    .animation(.easeInOut(duration: 0.3), value: paso)
+                ZStack {
+                    Capsule()
+                        .fill(n < paso ? Color.tlaneGreen : Color(.systemGray5))
+                        .frame(maxWidth: .infinity, maxHeight: 4)
+                    if n == paso {
+                        Capsule()
+                            .fill(Color.tlaneGreen)
+                            .frame(maxWidth: .infinity, maxHeight: 4)
+                            .matchedGeometryEffect(id: "activePaso", in: stepNS)
+                    }
+                }
+                .animation(.spring(response: 0.4), value: paso)
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
 
-    // MARK: - Paso 1: Selección de productos
+    @Namespace private var stepNS
+
+    // MARK: - Paso 1: Productos
 
     private var paso1Productos: some View {
         VStack(spacing: 16) {
-
             // Buscador
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField("Buscar producto...", text: $busqueda)
                     .autocorrectionDisabled()
+                if !busqueda.isEmpty {
+                    Button {
+                        withAnimation { busqueda = "" }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .padding(12)
             .background(Color(.secondarySystemGroupedBackground),
                         in: RoundedRectangle(cornerRadius: 12))
 
-            // Carrito resumen (si hay items)
-            if !carritoVacio {
-                carritoResumen
-            }
+            if !carritoVacio { carritoResumen }
 
-            // Lista de productos
             if productosFiltrados.isEmpty {
                 emptyProductos
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(productosFiltrados.enumerated()), id: \.element.id) { index, product in
-                        productoRow(product: product, esUltimo: index == productosFiltrados.count - 1)
+                    ForEach(Array(productosFiltrados.enumerated()), id: \.element.id) { i, product in
+                        productoRow(product: product, esUltimo: i == productosFiltrados.count - 1)
                     }
                 }
                 .background(Color(.secondarySystemGroupedBackground),
@@ -175,31 +231,20 @@ struct CobrarSheetView: View {
     private var carritoResumen: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Carrito")
+                Label("Carrito", systemImage: "cart.fill")
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.tlaneGreen)
                 Spacer()
                 Text(totalCarrito.formatted(.currency(code: "MXN")))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(Color.tlaneGreen)
+                    .scaleEffect(pulseTotal ? 1.12 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.5), value: pulseTotal)
             }
 
             ForEach(carrito) { item in
                 HStack(spacing: 12) {
-                    // Foto o ícono
-                    Group {
-                        if let data = item.product.imageData,
-                           let uiImg = UIImage(data: data) {
-                            Image(uiImage: uiImg)
-                                .resizable()
-                                .scaledToFill()
-                        } else {
-                            Image(systemName: "tag.fill")
-                                .foregroundStyle(Color.tlaneGreen)
-                        }
-                    }
-                    .frame(width: 36, height: 36)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    productoThumb(item.product, size: 36)
 
                     Text(item.product.name)
                         .font(.subheadline)
@@ -207,35 +252,17 @@ struct CobrarSheetView: View {
 
                     Spacer()
 
-                    // Stepper de cantidad
-                    HStack(spacing: 8) {
-                        Button {
-                            cambiarCantidad(product: item.product, delta: -1)
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(Color(.systemGray3))
-                                .font(.title3)
-                        }
-
-                        Text("\(item.cantidad)")
-                            .font(.subheadline.weight(.semibold))
-                            .frame(minWidth: 20)
-
-                        Button {
-                            cambiarCantidad(product: item.product, delta: +1)
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(Color.tlaneGreen)
-                                .font(.title3)
-                        }
-                        .disabled(item.cantidad >= item.product.currentStock)
-                    }
+                    stepperCompacto(product: item.product, cantidad: item.cantidad)
 
                     Text(item.subtotal.formatted(.currency(code: "MXN")))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 64, alignment: .trailing)
                 }
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.8).combined(with: .opacity),
+                    removal:   .scale(scale: 0.6).combined(with: .opacity)
+                ))
             }
         }
         .padding(14)
@@ -243,31 +270,23 @@ struct CobrarSheetView: View {
                     in: RoundedRectangle(cornerRadius: 16))
         .overlay {
             RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(Color.tlaneGreen.opacity(0.4), lineWidth: 1)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.tlaneGreen, Color.tlaneGreen.opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
         }
+        .animation(.spring(response: 0.38), value: carrito.count)
     }
 
     private func productoRow(product: Product, esUltimo: Bool) -> some View {
         let enCarrito = carrito.first(where: { $0.product.id == product.id })
-
         return VStack(spacing: 0) {
             HStack(spacing: 12) {
-                // Foto o ícono
-                Group {
-                    if let data = product.imageData,
-                       let uiImg = UIImage(data: data) {
-                        Image(uiImage: uiImg)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Image(systemName: categoryIcon(product.category))
-                            .foregroundStyle(Color.tlaneGreen)
-                            .font(.title3)
-                    }
-                }
-                .frame(width: 44, height: 44)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                productoThumb(product, size: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(product.name)
@@ -287,44 +306,72 @@ struct CobrarSheetView: View {
 
                 Spacer()
 
-                // Botón agregar / cantidad
                 if let item = enCarrito {
-                    HStack(spacing: 8) {
-                        Button {
-                            cambiarCantidad(product: product, delta: -1)
-                        } label: {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(Color(.systemGray3))
-                                .font(.title3)
-                        }
-                        Text("\(item.cantidad)")
-                            .font(.subheadline.weight(.bold))
-                            .frame(minWidth: 18)
-                        Button {
-                            cambiarCantidad(product: product, delta: +1)
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(Color.tlaneGreen)
-                                .font(.title3)
-                        }
-                        .disabled(item.cantidad >= product.currentStock)
-                    }
+                    stepperCompacto(product: product, cantidad: item.cantidad)
+                        .transition(.scale.combined(with: .opacity))
                 } else {
                     Button {
                         agregarAlCarrito(product: product)
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(Color.tlaneGreen)
                             .font(.title2)
+                            .foregroundStyle(Color.tlaneGreen)
+                            .symbolEffect(.bounce, value: enCarrito != nil)
                     }
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+            .animation(.spring(response: 0.35), value: enCarrito?.cantidad)
 
             if !esUltimo {
                 Divider().padding(.leading, 72)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func productoThumb(_ product: Product, size: CGFloat) -> some View {
+        Group {
+            if let data = product.imageData, let uiImg = UIImage(data: data) {
+                Image(uiImage: uiImg).resizable().scaledToFill()
+            } else {
+                Image(systemName: categoryIcon(product.category))
+                    .font(size > 40 ? .title3 : .body)
+                    .foregroundStyle(Color.tlaneGreen)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Color.tlaneGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: size * 0.23))
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.23))
+    }
+
+    private func stepperCompacto(product: Product, cantidad: Int) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                cambiarCantidad(product: product, delta: -1)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundStyle(Color(.systemGray3))
+                    .font(.title3)
+            }
+            Text("\(cantidad)")
+                .font(.subheadline.weight(.bold))
+                .frame(minWidth: 20)
+                .contentTransition(.numericText())
+            Button {
+                cambiarCantidad(product: product, delta: +1)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundStyle(cantidad >= product.currentStock
+                                     ? Color(.systemGray3) : Color.tlaneGreen)
+                    .font(.title3)
+            }
+            .disabled(cantidad >= product.currentStock)
         }
     }
 
@@ -333,7 +380,9 @@ struct CobrarSheetView: View {
             Image(systemName: "tray.fill")
                 .font(.system(size: 36))
                 .foregroundStyle(Color(.systemGray4))
-            Text(busqueda.isEmpty ? "Sin productos en inventario" : "Sin resultados para \"\(busqueda)\"")
+            Text(busqueda.isEmpty
+                 ? "Sin productos en inventario"
+                 : "Sin resultados para \"\(busqueda)\"")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -348,7 +397,7 @@ struct CobrarSheetView: View {
 
     private var paso2TipoCobro: some View {
         VStack(spacing: 20) {
-            // Resumen del total
+            // Total con animación
             VStack(spacing: 6) {
                 Text("Total a cobrar")
                     .font(.subheadline)
@@ -356,14 +405,22 @@ struct CobrarSheetView: View {
                 Text(totalCarrito.formatted(.currency(code: "MXN")))
                     .font(.system(size: 44, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.tlaneGreen)
+                    .contentTransition(.numericText())
+                    .shadow(color: Color.tlaneGreen.opacity(0.25), radius: 8)
                 Text("\(carrito.reduce(0) { $0 + $1.cantidad }) producto(s)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(Color(.secondarySystemGroupedBackground),
-                        in: RoundedRectangle(cornerRadius: 16))
+            .padding(.vertical, 24)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(Color.tlaneGreen.opacity(0.2), lineWidth: 1)
+                    }
+            )
 
             Text("¿Cómo quieres cobrar?")
                 .font(.headline)
@@ -376,28 +433,33 @@ struct CobrarSheetView: View {
             }
         }
     }
+
     // MARK: - Tipos de cobro
 
     enum TipoCobro: String, CaseIterable, Identifiable {
-        case tapToPay   = "Tap to Pay"
-        case qrCodi     = "QR / CoDi"
-        case efectivo   = "Efectivo"
-
+        case tapToPay = "Tap to Pay"
+        case qrCodi   = "QR / CoDi"
+        case efectivo = "Efectivo"
         var id: String { rawValue }
-
         var systemImage: String {
             switch self {
-            case .tapToPay:  return "wave.3.right.circle.fill"
-            case .qrCodi:    return "qrcode"
-            case .efectivo:  return "banknote"
+            case .tapToPay: "wave.3.right.circle.fill"
+            case .qrCodi:   "qrcode"
+            case .efectivo: "banknote"
             }
         }
-
         var descripcion: String {
             switch self {
-            case .tapToPay:  return "El cliente acerca su dispositivo"
-            case .qrCodi:    return "El cliente escanea el código"
-            case .efectivo:  return "Confirma el pago en mano"
+            case .tapToPay: "El cliente acerca su dispositivo"
+            case .qrCodi:   "El cliente escanea el código"
+            case .efectivo: "Confirma el pago en mano"
+            }
+        }
+        var color: Color {
+            switch self {
+            case .tapToPay: .blue
+            case .qrCodi:   .purple
+            case .efectivo: .green
             }
         }
     }
@@ -405,15 +467,20 @@ struct CobrarSheetView: View {
     private func tipoCobro(_ tipo: TipoCobro) -> some View {
         let seleccionado = tipoSeleccionado == tipo
         return Button {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             withAnimation(.spring(response: 0.3)) {
                 tipoSeleccionado = tipo
             }
         } label: {
             HStack(spacing: 16) {
-                Image(systemName: tipo.systemImage)
-                    .font(.title2)
-                    .foregroundStyle(seleccionado ? Color.tlaneGreen : .secondary)
-                    .frame(width: 36)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(seleccionado ? tipo.color.opacity(0.15) : Color(.systemGray6))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: tipo.systemImage)
+                        .font(.title3)
+                        .foregroundStyle(seleccionado ? tipo.color : .secondary)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(tipo.rawValue)
@@ -428,14 +495,23 @@ struct CobrarSheetView: View {
 
                 Image(systemName: seleccionado ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(seleccionado ? Color.tlaneGreen : Color(.systemGray4))
+                    .font(.title3)
+                    .symbolEffect(.bounce, value: seleccionado)
             }
             .padding(16)
             .background(Color(.secondarySystemGroupedBackground),
                         in: RoundedRectangle(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(seleccionado ? Color.tlaneGreen : Color.clear, lineWidth: 2)
+                    .strokeBorder(
+                        seleccionado
+                            ? LinearGradient(colors: [Color.tlaneGreen, tipo.color.opacity(0.6)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing)
+                            : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 2
+                    )
             }
+            .scaleEffect(seleccionado ? 1.01 : 1.0)
         }
     }
 
@@ -451,33 +527,24 @@ struct CobrarSheetView: View {
         }
     }
 
-    // Resumen compacto de productos (visible en paso 3)
     private var resumenProductosSim: some View {
         VStack(spacing: 0) {
-            ForEach(Array(carrito.enumerated()), id: \.element.id) { index, item in
+            ForEach(Array(carrito.enumerated()), id: \.element.id) { i, item in
                 HStack {
                     Text(item.product.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Spacer()
-                    Text("x\(item.cantidad)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("x\(item.cantidad)").font(.caption).foregroundStyle(.secondary)
                     Text(item.subtotal.formatted(.currency(code: "MXN")))
-                        .font(.caption.weight(.semibold))
-                        .frame(minWidth: 70, alignment: .trailing)
+                        .font(.caption.weight(.semibold)).frame(minWidth: 70, alignment: .trailing)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                if index < carrito.count - 1 {
-                    Divider().padding(.horizontal, 14)
-                }
+                if i < carrito.count - 1 { Divider().padding(.horizontal, 14) }
             }
             Divider()
             HStack {
-                Text("Total")
-                    .font(.subheadline.weight(.semibold))
+                Text("Total").font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(totalCarrito.formatted(.currency(code: "MXN")))
                     .font(.subheadline.weight(.bold))
@@ -496,30 +563,34 @@ struct CobrarSheetView: View {
             resumenProductosSim
 
             ZStack {
+                ForEach(0..<3) { i in
+                    Circle()
+                        .stroke(Color.tlaneGreen.opacity(0.15 - Double(i) * 0.04), lineWidth: 1)
+                        .frame(width: CGFloat(160 + i * 40), height: CGFloat(160 + i * 40))
+                        .scaleEffect(estadoSimulacion == .procesando ? 1.3 : 1.0)
+                        .opacity(estadoSimulacion == .procesando ? 0 : 1)
+                        .animation(
+                            .easeOut(duration: 1.2).repeatForever(autoreverses: false)
+                                .delay(Double(i) * 0.3),
+                            value: estadoSimulacion
+                        )
+                }
                 Circle()
-                    .fill(Color.tlaneGreen.opacity(0.08))
-                    .frame(width: 160, height: 160)
+                    .fill(Color.tlaneGreen.opacity(0.1))
+                    .frame(width: 140, height: 140)
                 Image(systemName: "wave.3.right.circle.fill")
                     .font(.system(size: 80))
                     .foregroundStyle(Color.tlaneGreen)
                     .symbolEffect(.pulse, isActive: estadoSimulacion == .procesando)
             }
 
-            VStack(spacing: 8) {
-                Text(estadoSimulacion == .esperando ? "Listo para cobrar" :
-                     estadoSimulacion == .procesando ? "Procesando..." : "¡Aprobado!")
-                    .font(.title3.weight(.semibold))
-                Text(estadoSimulacion == .aprobado
-                     ? "Pago recibido correctamente"
-                     : "Pide al cliente que acerque su dispositivo o tarjeta")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            estadoLabel(
+                esperando: "Listo para cobrar",
+                procesando: "Procesando...",
+                subtitulo: "Pide al cliente que acerque su dispositivo o tarjeta"
+            )
 
-            if estadoSimulacion == .esperando {
-                botonSimular("Simular cobro")
-            }
+            if estadoSimulacion == .esperando { botonSimular("Simular cobro") }
         }
     }
 
@@ -532,28 +603,32 @@ struct CobrarSheetView: View {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(Color(.secondarySystemGroupedBackground))
                     .frame(width: 180, height: 180)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [Color.tlaneGreen, .purple.opacity(0.6)],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
+                            )
+                    }
                 Image(systemName: "qrcode")
-                    .resizable()
-                    .scaledToFit()
+                    .resizable().scaledToFit()
                     .frame(width: 130, height: 130)
                     .foregroundStyle(.primary)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(Color.tlaneGreen, lineWidth: 2)
+                    .opacity(estadoSimulacion == .procesando ? 0.4 : 1)
+                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true),
+                               value: estadoSimulacion)
             }
 
-            Text(estadoSimulacion == .esperando
-                 ? "El cliente escanea este código con CoDi o su app bancaria"
-                 : estadoSimulacion == .procesando ? "Esperando confirmación..."
-                 : "¡Pago recibido!")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            estadoLabel(
+                esperando: "El cliente escanea el código",
+                procesando: "Esperando confirmación...",
+                subtitulo: "Con CoDi o app bancaria"
+            )
 
-            if estadoSimulacion == .esperando {
-                botonSimular("Confirmar escaneo")
-            }
+            if estadoSimulacion == .esperando { botonSimular("Confirmar escaneo") }
         }
     }
 
@@ -564,26 +639,48 @@ struct CobrarSheetView: View {
 
             ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.1))
-                    .frame(width: 130, height: 130)
+                    .fill(Color.green.opacity(0.08))
+                    .frame(width: 140, height: 140)
                 Image(systemName: "banknote")
-                    .font(.system(size: 56))
+                    .font(.system(size: 60))
                     .foregroundStyle(.green)
+                    .rotationEffect(estadoSimulacion == .procesando ? .degrees(5) : .zero)
+                    .animation(
+                        .easeInOut(duration: 0.2).repeatForever(autoreverses: true),
+                        value: estadoSimulacion
+                    )
             }
 
-            Text("Recibe el efectivo del cliente y confirma el cobro.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            estadoLabel(
+                esperando: "Recibe el efectivo",
+                procesando: "Registrando venta...",
+                subtitulo: "Recibe el efectivo del cliente y confirma el cobro"
+            )
 
             if estadoSimulacion == .esperando {
                 botonSimular("Efectivo recibido")
             }
-
             if estadoSimulacion == .procesando {
-                ProgressView("Registrando venta...")
-                    .tint(Color.tlaneGreen)
+                ProgressView().tint(Color.tlaneGreen)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func estadoLabel(esperando: String, procesando: String, subtitulo: String) -> some View {
+        VStack(spacing: 8) {
+            Text(estadoSimulacion == .aprobado ? "¡Aprobado!"
+                 : estadoSimulacion == .procesando ? procesando : esperando)
+                .font(.title3.weight(.semibold))
+                .contentTransition(.interpolate)
+                .animation(.spring(), value: estadoSimulacion)
+
+            Text(estadoSimulacion == .aprobado
+                 ? "Pago recibido correctamente" : subtitulo)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .animation(.easeInOut, value: estadoSimulacion)
         }
     }
 
@@ -591,20 +688,30 @@ struct CobrarSheetView: View {
         Button {
             simularPago()
         } label: {
-            Text(label)
-                .font(.body.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Color.tlaneGreen, in: RoundedRectangle(cornerRadius: 16))
-                .foregroundStyle(.white)
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.fill")
+                Text(label)
+            }
+            .font(.body.weight(.semibold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(
+                LinearGradient(
+                    colors: [Color.tlaneGreen, Color.tlaneGreen.opacity(0.8)],
+                    startPoint: .leading, endPoint: .trailing
+                ),
+                in: RoundedRectangle(cornerRadius: 16)
+            )
+            .foregroundStyle(.white)
+            .shadow(color: Color.tlaneGreen.opacity(0.35), radius: 10, y: 4)
         }
     }
 
-    // MARK: - Botón de acción (pasos 1 y 2)
+    // MARK: - Botón acción pasos 1 y 2
 
     private var botonAccion: some View {
         Button {
-            withAnimation(.spring(response: 0.4)) { paso += 1 }
+            avanzar(a: paso + 1)
         } label: {
             HStack(spacing: 8) {
                 if paso == 1 {
@@ -616,56 +723,77 @@ struct CobrarSheetView: View {
                     }
                 } else {
                     Text("Ir a cobrar")
+                    Image(systemName: "arrow.right")
                 }
             }
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(botonHabilitado ? Color.tlaneGreen : Color(.systemGray4),
-                        in: RoundedRectangle(cornerRadius: 16))
+            .background(
+                botonHabilitado
+                    ? LinearGradient(colors: [Color.tlaneGreen, Color.tlaneGreen.opacity(0.85)],
+                                     startPoint: .leading, endPoint: .trailing)
+                    : LinearGradient(colors: [Color(.systemGray4)],
+                                     startPoint: .leading, endPoint: .trailing),
+                in: RoundedRectangle(cornerRadius: 16)
+            )
             .foregroundStyle(.white)
+            .shadow(color: botonHabilitado ? Color.tlaneGreen.opacity(0.3) : .clear,
+                    radius: 10, y: 4)
         }
         .disabled(!botonHabilitado)
-        .animation(.easeInOut(duration: 0.2), value: botonHabilitado)
+        .animation(.spring(response: 0.3), value: botonHabilitado)
     }
 
     private var botonHabilitado: Bool {
         paso == 1 ? !carritoVacio : tipoSeleccionado != nil
     }
 
-    // MARK: - Lógica del carrito
+    // MARK: - Lógica carrito
 
     private func agregarAlCarrito(product: Product) {
-        if let index = carrito.firstIndex(where: { $0.product.id == product.id }) {
-            if carrito[index].cantidad < product.currentStock {
-                carrito[index].cantidad += 1
+        withAnimation(.spring(response: 0.35)) {
+            if let i = carrito.firstIndex(where: { $0.product.id == product.id }) {
+                if carrito[i].cantidad < product.currentStock { carrito[i].cantidad += 1 }
+            } else {
+                carrito.append(ItemCarrito(product: product, cantidad: 1))
             }
-        } else {
-            carrito.append(ItemCarrito(product: product, cantidad: 1))
         }
+        animarTotal()
     }
 
     private func cambiarCantidad(product: Product, delta: Int) {
-        guard let index = carrito.firstIndex(where: { $0.product.id == product.id }) else { return }
-        let nuevaCantidad = carrito[index].cantidad + delta
-        if nuevaCantidad <= 0 {
-            carrito.remove(at: index)
-        } else if nuevaCantidad <= product.currentStock {
-            carrito[index].cantidad = nuevaCantidad
+        guard let i = carrito.firstIndex(where: { $0.product.id == product.id }) else { return }
+        let nueva = carrito[i].cantidad + delta
+        withAnimation(.spring(response: 0.35)) {
+            if nueva <= 0 { carrito.remove(at: i) }
+            else if nueva <= product.currentStock { carrito[i].cantidad = nueva }
         }
+        animarTotal()
     }
 
-    // MARK: - Simulación de cobro
+    private func animarTotal() {
+        pulseTotal = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { pulseTotal = false }
+    }
+
+    // MARK: - Simulación y notificación
 
     private func simularPago() {
-        withAnimation { estadoSimulacion = .procesando }
+        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        withAnimation(.spring()) { estadoSimulacion = .procesando }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
             persistirVenta()
-            withAnimation(.spring(response: 0.4)) {
+
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 estadoSimulacion = .aprobado
-                mostrarExito = true
+                mostrarExito     = true
             }
+
             onVentaRegistrada(totalCarrito, tipoSeleccionado ?? .efectivo)
+            enviarNotificacionVenta()
         }
     }
 
@@ -679,90 +807,123 @@ struct CobrarSheetView: View {
                 priceAtSale: $0.product.price
             )
         }
-        let sale = Sale(
-            amount: totalCarrito,
-            paymentMethod: paymentMethod,
-            items: items
-        )
+        let sale = Sale(amount: totalCarrito, paymentMethod: paymentMethod, items: items)
         context.insert(sale)
-
-        // Descontar stock
-        for item in carrito {
-            item.product.currentStock -= item.cantidad
-        }
-
+        for item in carrito { item.product.currentStock -= item.cantidad }
         try? context.save()
     }
 
-    // MARK: - Overlay de éxito
+    // MARK: - Notificaciones
+
+    private func pedirPermisoNotificaciones() async {
+        try? await UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .sound, .badge])
+    }
+
+    private func enviarNotificacionVenta() {
+        let content         = UNMutableNotificationContent()
+        content.title       = "✅ Venta registrada"
+        content.body        = "\(totalCarrito.formatted(.currency(code: "MXN"))) vía \(tipoSeleccionado?.rawValue ?? ""). \(carrito.reduce(0) { $0 + $1.cantidad }) pieza(s) vendida(s)."
+        content.sound       = .default
+        content.badge       = 1
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "venta-\(UUID())",
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - Overlay éxito
 
     private var overlayExito: some View {
         ZStack {
-            Color(.systemBackground).opacity(0.95).ignoresSafeArea()
+            Color(.systemBackground).opacity(0.97).ignoresSafeArea()
 
             VStack(spacing: 20) {
+                // Ícono animado
                 ZStack {
                     Circle()
-                        .fill(Color.tlaneGreen.opacity(0.15))
-                        .frame(width: 100, height: 100)
+                        .fill(Color.tlaneGreen.opacity(0.12))
+                        .frame(width: 120, height: 120)
+                    Circle()
+                        .fill(Color.tlaneGreen.opacity(0.06))
+                        .frame(width: 150, height: 150)
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 64))
+                        .font(.system(size: 72))
                         .foregroundStyle(Color.tlaneGreen)
+                        .symbolEffect(.bounce, value: mostrarExito)
                 }
 
                 Text("¡Venta registrada!")
                     .font(.title.weight(.bold))
 
                 Text(totalCarrito.formatted(.currency(code: "MXN")))
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.tlaneGreen)
 
-                // Detalle de productos vendidos
-                VStack(spacing: 4) {
+                // Productos vendidos
+                VStack(spacing: 6) {
                     ForEach(carrito) { item in
                         HStack {
                             Text(item.product.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.caption).foregroundStyle(.secondary)
                             Spacer()
                             Text("x\(item.cantidad)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         }
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(14)
+                .background(Color(.secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 16)
 
-                Text("Vía \(tipoSeleccionado?.rawValue ?? "")")
+                Label("Vía \(tipoSeleccionado?.rawValue ?? "")",
+                      systemImage: tipoSeleccionado?.systemImage ?? "creditcard")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     dismiss()
                 } label: {
                     Text("Listo")
                         .font(.body.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background(Color.tlaneGreen, in: RoundedRectangle(cornerRadius: 16))
+                        .background(
+                            LinearGradient(
+                                colors: [Color.tlaneGreen, Color.tlaneGreen.opacity(0.85)],
+                                startPoint: .leading, endPoint: .trailing
+                            ),
+                            in: RoundedRectangle(cornerRadius: 16)
+                        )
                         .foregroundStyle(.white)
+                        .shadow(color: Color.tlaneGreen.opacity(0.4), radius: 12, y: 6)
                 }
+                .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
-            .padding(32)
+            .padding(24)
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .transition(.asymmetric(
+            insertion: .scale(scale: 0.92).combined(with: .opacity),
+            removal:   .opacity
+        ))
     }
 
     // MARK: - Helper
 
     private func categoryIcon(_ category: String) -> String {
         switch category {
-        case "textil":   return "tshirt.fill"
-        case "barro":    return "cup.and.saucer.fill"
-        case "madera":   return "tree.fill"
-        case "joyería":  return "sparkles"
-        default:         return "tag.fill"
+        case "textil":   "tshirt.fill"
+        case "barro":    "cup.and.saucer.fill"
+        case "madera":   "tree.fill"
+        case "joyería":  "sparkles"
+        default:         "tag.fill"
         }
     }
 }
