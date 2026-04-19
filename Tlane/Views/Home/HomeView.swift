@@ -244,7 +244,7 @@ struct HomeView: View {
       Spacer()
 
       VStack(alignment: .trailing, spacing: 2) {
-        Text((esCobro ? "+" : "-") + sale.amount.formatted(.currency(code: "MXN")))
+          Text((esCobro ? "+" : "-") + abs(sale.amount).formatted(.currency(code: "MXN")))
           .font(.body.weight(.bold))
           .foregroundStyle(color)
         Text(sale.date.formatted(date: .omitted, time: .shortened))

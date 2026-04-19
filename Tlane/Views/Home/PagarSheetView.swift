@@ -2,14 +2,13 @@
 //  PagarSheetView.swift
 //  Tlane
 //
-//  Created by Dev Jr.16 on 18/04/26.
-//
 import SwiftUI
+import SwiftData
 
 // MARK: - Modelos
 
 enum MetodoPago: String, CaseIterable, Identifiable {
-    case applePay   = "Apple Pay"
+    case applePay      = "Apple Pay"
     case transferencia = "Transferencia"
 
     var id: String { rawValue }
@@ -20,24 +19,32 @@ enum MetodoPago: String, CaseIterable, Identifiable {
         case .transferencia: return "arrow.left.arrow.right.circle.fill"
         }
     }
+
+    /// Cómo persiste en SwiftData (sólo distingue efectivo/digital).
+    var paymentMethod: PaymentMethod { .digital }
 }
 
 // MARK: - View Principal
 
 struct PagarSheetView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
 
     @State private var montoTexto: String = ""
     @State private var metodoSeleccionado: MetodoPago? = nil
     @State private var clabe: String = ""
     @State private var banco: String = ""
     @State private var concepto: String = ""
-    @State private var paso: Int = 1          // 1: monto, 2: método, 3: datos/confirmar
+    @State private var paso: Int = 1
     @State private var mostrarExito: Bool = false
     @State private var procesando: Bool = false
 
+    /// Monto como Decimal (fuente de verdad para persistencia).
+    private var montoDecimal: Decimal {
+        Decimal(string: montoTexto) ?? 0
+    }
     private var monto: Double { Double(montoTexto) ?? 0 }
-    private var montoValido: Bool { monto > 0 }
+    private var montoValido: Bool { montoDecimal > 0 }
 
     var body: some View {
         NavigationStack {
@@ -59,9 +66,7 @@ struct PagarSheetView: View {
 
     private var mainContent: some View {
         VStack(spacing: 0) {
-            // Indicador de pasos
             stepIndicator
-
             ScrollView {
                 VStack(spacing: 24) {
                     switch paso {
@@ -73,15 +78,10 @@ struct PagarSheetView: View {
                 }
                 .padding(20)
             }
-
-            // Botón de acción
-            botonAccion
-                .padding(20)
+            botonAccion.padding(20)
         }
         .background(Color(.systemGroupedBackground))
     }
-
-    // MARK: - Indicador de pasos
 
     private var stepIndicator: some View {
         HStack(spacing: 4) {
@@ -96,7 +96,7 @@ struct PagarSheetView: View {
         .padding(.vertical, 14)
     }
 
-    // MARK: - Paso 1: Monto
+    // MARK: - Paso 1
 
     private var paso1Monto: some View {
         VStack(spacing: 20) {
@@ -104,7 +104,6 @@ struct PagarSheetView: View {
                 .font(.title2.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Display del monto
             VStack(spacing: 4) {
                 Text(monto == 0 ? "$0.00" : monto.formatted(.currency(code: "MXN")))
                     .font(.system(size: 48, weight: .bold, design: .rounded))
@@ -113,10 +112,10 @@ struct PagarSheetView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 20)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+                    .background(Color(.secondarySystemGroupedBackground),
+                                in: RoundedRectangle(cornerRadius: 16))
             }
 
-            // Teclado numérico
             tecladoNumerico
         }
     }
@@ -132,9 +131,7 @@ struct PagarSheetView: View {
             ForEach(teclas, id: \.self) { fila in
                 HStack(spacing: 12) {
                     ForEach(fila, id: \.self) { tecla in
-                        Button {
-                            presionarTecla(tecla)
-                        } label: {
+                        Button { presionarTecla(tecla) } label: {
                             Text(tecla)
                                 .font(.title2.weight(.medium))
                                 .frame(maxWidth: .infinity)
@@ -156,14 +153,13 @@ struct PagarSheetView: View {
         case ".":
             if !montoTexto.contains(".") { montoTexto += "." }
         default:
-            // Limitar a 2 decimales
             if let punto = montoTexto.firstIndex(of: "."),
                montoTexto.distance(from: punto, to: montoTexto.endIndex) > 2 { return }
             montoTexto += tecla
         }
     }
 
-    // MARK: - Paso 2: Método de pago
+    // MARK: - Paso 2
 
     private var paso2Metodo: some View {
         VStack(spacing: 20) {
@@ -177,9 +173,7 @@ struct PagarSheetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: 12) {
-                ForEach(MetodoPago.allCases) { metodo in
-                    metodoCard(metodo)
-                }
+                ForEach(MetodoPago.allCases) { metodoCard($0) }
             }
         }
     }
@@ -187,22 +181,17 @@ struct PagarSheetView: View {
     private func metodoCard(_ metodo: MetodoPago) -> some View {
         let seleccionado = metodoSeleccionado == metodo
         return Button {
-            withAnimation(.spring(response: 0.3)) {
-                metodoSeleccionado = metodo
-            }
+            withAnimation(.spring(response: 0.3)) { metodoSeleccionado = metodo }
         } label: {
             HStack(spacing: 16) {
                 Image(systemName: metodo.systemImage)
                     .font(.title2)
                     .foregroundStyle(seleccionado ? Color.tlaneGreen : .secondary)
                     .frame(width: 32)
-
                 Text(metodo.rawValue)
                     .font(.body.weight(.medium))
                     .foregroundStyle(.primary)
-
                 Spacer()
-
                 Image(systemName: seleccionado ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(seleccionado ? Color.tlaneGreen : Color(.systemGray4))
             }
@@ -216,15 +205,12 @@ struct PagarSheetView: View {
         }
     }
 
-    // MARK: - Paso 3: Datos / Confirmar
+    // MARK: - Paso 3
 
     private var paso3Datos: some View {
         VStack(spacing: 20) {
-            if metodoSeleccionado == .applePay {
-                applePayView
-            } else {
-                transferenciaView
-            }
+            if metodoSeleccionado == .applePay { applePayView }
+            else { transferenciaView }
         }
     }
 
@@ -233,7 +219,6 @@ struct PagarSheetView: View {
             Text("Confirmar con Apple Pay")
                 .font(.title2.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
-
             VStack(spacing: 8) {
                 Image(systemName: "apple.logo")
                     .font(.system(size: 60))
@@ -247,7 +232,6 @@ struct PagarSheetView: View {
             .padding(32)
             .background(Color(.secondarySystemGroupedBackground),
                         in: RoundedRectangle(cornerRadius: 20))
-
             resumenPago
         }
     }
@@ -257,9 +241,7 @@ struct PagarSheetView: View {
             Text("Datos de transferencia")
                 .font(.title2.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
-
             resumenPago
-
             VStack(spacing: 12) {
                 campoTransferencia(titulo: "CLABE", placeholder: "18 dígitos", texto: $clabe)
                     .keyboardType(.numberPad)
@@ -289,15 +271,14 @@ struct PagarSheetView: View {
                     .foregroundStyle(.secondary)
                 Text(monto.formatted(.currency(code: "MXN")))
                     .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.tlaneGreen)
+                    .foregroundStyle(.red)
             }
             Spacer()
             Text(metodoSeleccionado?.rawValue ?? "")
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.tlaneGreen.opacity(0.12),
-                            in: Capsule())
+                .background(Color.tlaneGreen.opacity(0.12), in: Capsule())
                 .foregroundStyle(Color.tlaneGreen)
         }
         .padding(14)
@@ -305,19 +286,15 @@ struct PagarSheetView: View {
                     in: RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: - Botón de acción
+    // MARK: - Botón
 
     private var botonAccion: some View {
-        Button {
-            accionPrincipal()
-        } label: {
+        Button { accionPrincipal() } label: {
             Group {
                 if procesando {
-                    ProgressView()
-                        .tint(.white)
+                    ProgressView().tint(.white)
                 } else {
-                    Text(labelBoton)
-                        .font(.body.weight(.semibold))
+                    Text(labelBoton).font(.body.weight(.semibold))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -360,25 +337,34 @@ struct PagarSheetView: View {
         }
     }
 
-    // MARK: - Confirmar pago
+    // MARK: - Confirmar y PERSISTIR egreso
 
     private func confirmarPago() {
         procesando = true
-        // Simular delay de procesamiento
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // Persistir el egreso como Sale con amount NEGATIVO.
+            // Es la forma más simple de reutilizar el modelo: todos los
+            // queries/totales existentes ya netean cobros y egresos.
+            let metodo = metodoSeleccionado ?? .applePay
+            let sale = Sale(
+                amount: -montoDecimal,
+                date: .now,
+                paymentMethod: metodo.paymentMethod,
+                items: []
+            )
+            context.insert(sale)
+            try? context.save()
+
             procesando = false
-            withAnimation(.spring(response: 0.4)) {
-                mostrarExito = true
-            }
+            withAnimation(.spring(response: 0.4)) { mostrarExito = true }
         }
     }
 
-    // MARK: - Overlay de éxito
+    // MARK: - Overlay éxito
 
     private var overlayExito: some View {
         ZStack {
             Color(.systemBackground).opacity(0.95).ignoresSafeArea()
-
             VStack(spacing: 20) {
                 ZStack {
                     Circle()
@@ -388,21 +374,15 @@ struct PagarSheetView: View {
                         .font(.system(size: 64))
                         .foregroundStyle(Color.tlaneGreen)
                 }
-
                 Text("¡Pago exitoso!")
                     .font(.title.weight(.bold))
-
                 Text(monto.formatted(.currency(code: "MXN")))
                     .font(.title2)
                     .foregroundStyle(.secondary)
-
                 Text("Vía \(metodoSeleccionado?.rawValue ?? "")")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-
-                Button {
-                    dismiss()
-                } label: {
+                Button { dismiss() } label: {
                     Text("Listo")
                         .font(.body.weight(.semibold))
                         .frame(maxWidth: .infinity)

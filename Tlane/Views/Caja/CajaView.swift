@@ -40,17 +40,17 @@ struct CajaView: View {
     currentMonthSales.reduce(Decimal(0)) { $0 + $1.amount }
   }
 
-  private var totalEfectivoMes: Decimal {
-    currentMonthSales
-      .filter { $0.paymentMethod == .cash }
-      .reduce(Decimal(0)) { $0 + $1.amount }
-  }
+    private var totalEfectivoMes: Decimal {
+      currentMonthSales
+        .filter { $0.paymentMethod == .cash && $0.amount > 0 }
+        .reduce(Decimal(0)) { $0 + $1.amount }
+    }
 
-  private var totalDigitalMes: Decimal {
-    currentMonthSales
-      .filter { $0.paymentMethod == .digital }
-      .reduce(Decimal(0)) { $0 + $1.amount }
-  }
+    private var totalDigitalMes: Decimal {
+      currentMonthSales
+        .filter { $0.paymentMethod == .digital && $0.amount > 0 }
+        .reduce(Decimal(0)) { $0 + $1.amount }
+    }
 
   private var operacionesMes: Int { currentMonthSales.count }
 
