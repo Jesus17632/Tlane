@@ -37,21 +37,17 @@ struct CameraPreviewView: UIViewRepresentable {
   /// Llamado por SwiftUI al destruir la vista — detiene la sesión en background
   /// para liberar el hardware de la cámara correctamente.
   static func dismantleUIView(_ uiView: PreviewLayerView, coordinator: ()) {
-    Task { @MainActor in
-      // Capture the session on the main actor (UIView is main-actor isolated)
-      let session = uiView.session
-      // Stop the session off the main thread to avoid blocking the main actor
-      Task.detached(priority: .background) {
-        session?.stopRunning()
-      }
+    Task.detached {
+      uiView.session?.stopRunning()
     }
   }
 
-  @MainActor final class PreviewLayerView: UIView {
+  final class PreviewLayerView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
 
-    /// Referencia débil para que dismantleUIView pueda detenerla.
-    weak var session: AVCaptureSession?
+    // ↓ CAMBIO: `weak` → strong. Con `weak`, la referencia ya era nil
+    //   cuando SwiftUI llamaba dismantleUIView, y stopRunning() nunca se ejecutaba.
+    var session: AVCaptureSession?
 
     func setSession(_ session: AVCaptureSession) {
       guard let previewLayer = layer as? AVCaptureVideoPreviewLayer else { return }

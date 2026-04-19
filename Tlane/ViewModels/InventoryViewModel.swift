@@ -19,12 +19,12 @@ final class InventoryViewModel: NSObject {
   var state: CaptureState = .requestingPermission
   var productName: String = ""
   var productPrice: Decimal = 0
+  var productQuantity: Int = 0
 
   let cameraSession = AVCaptureSession()
   private let sessionQueue = DispatchQueue(label: "tlane.camera.session")
   private let classifier = ProductClassifierService()
 
-  // Debounce: necesitamos 1.5s con la misma categoría antes de disparar
   nonisolated(unsafe) private var lastCategoryRaw: String?
   nonisolated(unsafe) private var lastCategoryTimestamp: Date?
   nonisolated(unsafe) private var lastAnalysisTime: Date = .distantPast
@@ -39,8 +39,6 @@ final class InventoryViewModel: NSObject {
 
   func requestCameraPermission() async {
     #if targetEnvironment(simulator)
-    // En Simulator no hay cámara; mostramos el viewfinder placeholder
-    // y nunca disparamos detección automática.
     state = .scanning
     return
     #else
@@ -97,15 +95,15 @@ final class InventoryViewModel: NSObject {
 
   func saveProduct(category: String, imageData: Data?) {
     let trimmed = productName.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty, productPrice > 0 else { return }
+    guard !trimmed.isEmpty, productPrice > 0, productQuantity > 0 else { return }
 
     let product = Product(
       name: trimmed,
       category: category,
-      initialStock: 1,
-      currentStock: 1,
+      initialStock: productQuantity,
+      currentStock: productQuantity,
       price: productPrice,
-      isUniqueItem: true,
+      isUniqueItem: productQuantity == 1,
       imageData: imageData
     )
     context.insert(product)
@@ -124,6 +122,7 @@ final class InventoryViewModel: NSObject {
   func resetToScanning() {
     productName = ""
     productPrice = 0
+    productQuantity = 0
     clearDebounce()
     state = .scanning
     startCamera()
@@ -131,14 +130,14 @@ final class InventoryViewModel: NSObject {
 
   // MARK: - Control de cámara
 
-  private func stopCamera() {
+  func stopCamera() {
     sessionQueue.async { [weak self] in
       guard let session = self?.cameraSession, session.isRunning else { return }
       session.stopRunning()
     }
   }
 
-  private func startCamera() {
+  func startCamera() {
     sessionQueue.async { [weak self] in
       guard let session = self?.cameraSession, !session.isRunning else { return }
       session.startRunning()
@@ -161,7 +160,6 @@ extension InventoryViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     didOutput sampleBuffer: CMSampleBuffer,
     from connection: AVCaptureConnection
   ) {
-    // Throttle: analizar solo 1 frame cada 0.5s y evitar solaparse
     let now = Date()
     guard now.timeIntervalSince(lastAnalysisTime) >= 0.5, !isAnalyzing else { return }
     lastAnalysisTime = now
@@ -196,7 +194,6 @@ extension InventoryViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
       return
     }
 
-    // Ignorar "otro" — no es una categoría que reconozcamos con confianza
     guard result.category != "otro" else {
       await MainActor.run { self.clearDebounce() }
       return
@@ -207,7 +204,6 @@ extension InventoryViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
       if self.lastCategoryRaw == result.category,
          let ts = self.lastCategoryTimestamp,
          now.timeIntervalSince(ts) >= 1.5 {
-        // Categoría estable por ≥1.5s → disparar detección
         self.state = .detected(category: result.category, frame: image)
         self.stopCamera()
         self.clearDebounce()
@@ -215,7 +211,6 @@ extension InventoryViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
         self.lastCategoryRaw = result.category
         self.lastCategoryTimestamp = now
       }
-      // else: misma categoría pero aún no pasa 1.5s — esperar
     }
   }
 }
