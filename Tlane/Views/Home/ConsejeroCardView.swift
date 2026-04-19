@@ -188,7 +188,6 @@ final class ChatViewModel {
             : inputText.trimmingCharacters(in: .whitespaces)
 
         guard !text.isEmpty else { return }
-
         if voice.isRecording { voice.stopRecording() }
 
         messages.append(ChatMessage(role: .user, text: text))
@@ -200,39 +199,112 @@ final class ChatViewModel {
 
         if session == nil {
             session = LanguageModelSession(instructions: """
-                Eres un asistente de ventas experto para artesanos y comerciantes \
-                de mercados tradicionales de México. \
-                Conoces sus datos de negocio porque se te proporcionan en cada mensaje. \
-                Responde en español mexicano, de forma breve, práctica y amigable. \
-                Máximo 3 oraciones por respuesta.
+                Eres un asistente de ventas para artesanos mexicanos. \
+                Entiendes lenguaje natural y puedes ejecutar acciones en la app. \
+                Cuando el usuario quiera agregar producto, reducir stock, registrar \
+                venta o gasto, extrae los datos y devuelve la acción correspondiente. \
+                Si es solo conversación, usa action: none. \
+                Responde siempre en español mexicano coloquial, máximo 2 oraciones.
                 """)
         }
 
         let prompt = """
-            Contexto actual del negocio:
+            Contexto del negocio:
             \(contextSummary)
 
-            Pregunta del comerciante: \(text)
+            Mensaje del usuario: \(text)
             """
 
         do {
             #if targetEnvironment(simulator)
             try? await Task.sleep(for: .seconds(1))
-            messages.append(ChatMessage(role: .assistant, text: "Estoy en simulador, pero en tu dispositivo real te ayudaría con datos de tu negocio."))
+            messages.append(ChatMessage(role: .assistant, text: "En simulador — en dispositivo real ejecutaría la acción."))
             #else
             guard case .available = SystemLanguageModel.default.availability else {
-                messages.append(ChatMessage(role: .assistant, text: "Apple Intelligence no está disponible en este momento."))
+                messages.append(ChatMessage(role: .assistant, text: "Apple Intelligence no está disponible."))
                 isThinking = false
                 return
             }
-            let response = try await session!.respond(to: prompt)
-            messages.append(ChatMessage(role: .assistant, text: response.content))
+
+            let response = try await session!.respond(to: prompt, generating: ChatResponse.self)
+            let result = response.content
+
+            // Ejecutar acción si aplica
+            if result.action != .none {
+                await executeAction(result, context: context)
+            }
+
+            messages.append(ChatMessage(role: .assistant, text: result.message))
             #endif
         } catch {
-            messages.append(ChatMessage(role: .assistant, text: "No pude responder ahora. Intenta de nuevo."))
+            messages.append(ChatMessage(role: .assistant, text: "No pude responder. Intenta de nuevo."))
         }
 
         isThinking = false
+    }
+
+    // MARK: - Ejecutor de acciones
+
+    private func executeAction(_ intent: ChatResponse, context: ModelContext) async {
+        switch intent.action {
+
+        case .addProduct:
+            guard !intent.productName.isEmpty, intent.price > 0 else { return }
+            let product = Product(
+                name: intent.productName,
+                category: intent.category.isEmpty ? "otro" : intent.category,
+                initialStock: intent.quantity,
+                currentStock: intent.quantity,
+                price: intent.price,
+                isUniqueItem: intent.quantity == 1
+            )
+            context.insert(product)
+            try? context.save()
+
+        case .reduceStock:
+            guard !intent.productName.isEmpty else { return }
+            let name = intent.productName
+            let descriptor = FetchDescriptor<Product>(
+                predicate: #Predicate { $0.name.localizedStandardContains(name) }
+            )
+            if let product = try? context.fetch(descriptor).first {
+                let reducir = max(1, intent.quantity)
+                product.currentStock = max(0, product.currentStock - reducir)
+                try? context.save()
+            }
+
+        case .registerSale:
+            let amount = intent.amount > 0 ? intent.amount : intent.price
+            guard amount > 0 else { return }
+            let sale = Sale(
+                amount: amount,
+                paymentMethod: .cash,
+                items: intent.productName.isEmpty ? [] : [
+                    SaleItem(
+                        productId: UUID(),
+                        productName: intent.productName,
+                        quantity: intent.quantity,
+                        priceAtSale: amount
+                    )
+                ]
+            )
+            context.insert(sale)
+            try? context.save()
+
+        case .registerExpense:
+            let amount = intent.amount > 0 ? intent.amount : intent.price
+            guard amount > 0 else { return }
+            let expense = Sale(
+                amount: -amount,
+                paymentMethod: .cash,
+                items: []
+            )
+            context.insert(expense)
+            try? context.save()
+
+        case .none:
+            break
+        }
     }
 }
 
