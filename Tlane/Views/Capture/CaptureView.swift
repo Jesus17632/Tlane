@@ -5,27 +5,47 @@ struct InventoryView: View {
   @Environment(\.modelContext) private var context
   @State private var viewModel: InventoryViewModel?
 
-  var body: some View {
-    ZStack {
-      Color.black.ignoresSafeArea()
+    var body: some View {
+      ZStack {
+        Color.black.ignoresSafeArea()
 
-      if let viewModel {
-        content(vm: viewModel)
-      } else {
-        ProgressView()
-          .tint(.white)
+        if let viewModel {
+          content(vm: viewModel)
+        } else {
+          ProgressView()
+            .tint(.white)
+        }
+      }
+      .toolbar(.hidden, for: .navigationBar)
+      .task {
+        // Primera carga: crear VM y pedir permiso si es necesario
+        if viewModel == nil {
+          viewModel = InventoryViewModel(context: context)
+        }
+        if case .requestingPermission = viewModel?.state {
+          await viewModel?.requestCameraPermission()
+        }
+      }
+      .onAppear {
+        // Se dispara cada vez que entras al tab (incluso re-apariciones)
+        guard let vm = viewModel else { return }
+
+        // Si dejamos la vista a mitad de un flujo (detected/saving),
+        // reseteamos a scanning para un estado limpio al volver.
+        switch vm.state {
+        case .detected, .saving:
+          vm.resetToScanning()   // ya hace startCamera() + limpia estado
+        case .scanning:
+          vm.startCamera()       // reanuda si estaba pausada
+        case .requestingPermission, .denied:
+          break                  // el .task se encarga del permiso
+        }
+      }
+      .onDisappear {
+        // Se dispara al cambiar de tab. Apagar la cámara libera GPU/batería.
+        viewModel?.stopCamera()
       }
     }
-    .toolbar(.hidden, for: .navigationBar)
-    .task {
-      if viewModel == nil {
-        viewModel = InventoryViewModel(context: context)
-      }
-      if case .requestingPermission = viewModel?.state {
-        await viewModel?.requestCameraPermission()
-      }
-    }
-  }
 
   @ViewBuilder
   private func content(vm: InventoryViewModel) -> some View {

@@ -3,9 +3,16 @@ import SwiftData
 import Charts
 import PhotosUI
 
+struct IngresoDia {
+  let dia: Date
+  let total: Decimal
+}
+
 struct CajaView: View {
   @Environment(\.modelContext) private var context
-  @State private var viewModel: CajaViewModel?
+
+  // MARK: - @Query reactivo (reemplaza CajaViewModel)
+  @Query(sort: \Sale.date, order: .reverse) private var allSales: [Sale]
 
   // Persistencia del avatar y nombre
   @AppStorage("usuario_nombre") private var usuarioNombre: String = "Mi cuenta"
@@ -19,22 +26,79 @@ struct CajaView: View {
   @State private var nombreTemp     = ""
   @State private var rolTemp        = ""
 
+  // MARK: - Derivados reactivos
+
+  private var currentMonthSales: [Sale] {
+    let calendar = Calendar.current
+    guard let monthStart = calendar.dateInterval(of: .month, for: .now)?.start else {
+      return []
+    }
+    return allSales.filter { $0.date >= monthStart }
+  }
+
+  private var totalMes: Decimal {
+    currentMonthSales.reduce(Decimal(0)) { $0 + $1.amount }
+  }
+
+  private var totalEfectivoMes: Decimal {
+    currentMonthSales
+      .filter { $0.paymentMethod == .cash }
+      .reduce(Decimal(0)) { $0 + $1.amount }
+  }
+
+  private var totalDigitalMes: Decimal {
+    currentMonthSales
+      .filter { $0.paymentMethod == .digital }
+      .reduce(Decimal(0)) { $0 + $1.amount }
+  }
+
+  private var operacionesMes: Int { currentMonthSales.count }
+
+  private var efectivoRatio: Double {
+    guard totalMes > 0 else { return 0 }
+    let efectivo = NSDecimalNumber(decimal: totalEfectivoMes).doubleValue
+    let total = NSDecimalNumber(decimal: totalMes).doubleValue
+    return efectivo / total
+  }
+
+  private var monthLabel: String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "es_MX")
+    formatter.dateFormat = "LLLL yyyy"
+    return formatter.string(from: .now).capitalized
+  }
+
+  private var ingresosPorDia: [IngresoDia] {
+    let calendar = Calendar.current
+    var grupos: [Date: Decimal] = [:]
+    for sale in currentMonthSales {
+      let inicio = calendar.startOfDay(for: sale.date)
+      grupos[inicio, default: Decimal(0)] += sale.amount
+    }
+    return grupos
+      .map { IngresoDia(dia: $0.key, total: $0.value) }
+      .sorted { $0.dia < $1.dia }
+  }
+
+  // MARK: - Body
+
   var body: some View {
     ZStack {
       Color.tlaneBackground.ignoresSafeArea()
-
-      if let viewModel {
-        content(vm: viewModel)
-      } else {
-        ProgressView()
+      ScrollView {
+        VStack(spacing: 20) {
+          avatarSection
+          totalCard
+          ingresosChart
+          desgloseSection
+          operacionesCard
+          historicoPlaceholder
+        }
+        .padding()
       }
     }
     .navigationTitle("Mi Perfil")
     .onAppear {
-      if viewModel == nil {
-        viewModel = CajaViewModel(context: context)
-      }
-      // Cargar avatar guardado
       if !avatarBase64.isEmpty,
          let data = Data(base64Encoded: avatarBase64),
          let img  = UIImage(data: data) {
@@ -52,27 +116,10 @@ struct CajaView: View {
     }
   }
 
-  @ViewBuilder
-  private func content(vm: CajaViewModel) -> some View {
-    ScrollView {
-      VStack(spacing: 20) {
-        avatarSection
-        totalCard(vm: vm)
-        ingresosChart(vm: vm)
-        desgloseSection(vm: vm)
-        operacionesCard(vm: vm)
-        historicoPlaceholder
-      }
-      .padding()
-    }
-  }
-
-  // MARK: - Avatar editable
+  // MARK: - Avatar
 
   private var avatarSection: some View {
     VStack(spacing: 12) {
-
-      // Foto / ícono con botón de edición
       PhotosPicker(selection: $photoItem, matching: .images) {
         ZStack(alignment: .bottomTrailing) {
           Group {
@@ -96,8 +143,6 @@ struct CajaView: View {
               }
             }
           }
-
-          // Badge de edición
           ZStack {
             Circle()
               .fill(Color.tlaneGreen)
@@ -193,34 +238,36 @@ struct CajaView: View {
 
   // MARK: - Total del mes
 
-  private func totalCard(vm: CajaViewModel) -> some View {
+  private var totalCard: some View {
     VStack(alignment: .leading, spacing: 8) {
       Text("Total del mes")
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(.secondary)
-      Text(vm.monthLabel)
+      Text(monthLabel)
         .font(.caption)
         .foregroundStyle(.tertiary)
-      Text(vm.totalMes.formatted(.currency(code: "MXN")))
+      Text(totalMes.formatted(.currency(code: "MXN")))
         .font(.system(size: 44, weight: .bold, design: .rounded))
         .foregroundStyle(Color.tlaneGreen)
         .minimumScaleFactor(0.6)
         .lineLimit(1)
         .padding(.top, 4)
+        .contentTransition(.numericText())
+        .animation(.easeInOut, value: totalMes)
     }
     .padding(20)
     .frame(maxWidth: .infinity, alignment: .leading)
     .glassEffect(in: RoundedRectangle(cornerRadius: 20))
   }
 
-  // MARK: - Gráfica ingresos por día
+  // MARK: - Gráfica
 
-  private func ingresosChart(vm: CajaViewModel) -> some View {
+  private var ingresosChart: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Ingresos por día")
         .font(.headline)
 
-      if vm.ingresosPorDia.isEmpty {
+      if ingresosPorDia.isEmpty {
         HStack {
           Image(systemName: "chart.bar.xaxis")
             .foregroundStyle(.secondary)
@@ -232,7 +279,7 @@ struct CajaView: View {
         .padding(.vertical, 24)
       } else {
         Chart {
-          ForEach(vm.ingresosPorDia, id: \.dia) { punto in
+          ForEach(ingresosPorDia, id: \.dia) { punto in
             BarMark(
               x: .value("Día", punto.dia, unit: .day),
               y: .value("Ingreso", NSDecimalNumber(decimal: punto.total).doubleValue)
@@ -242,7 +289,7 @@ struct CajaView: View {
           }
         }
         .chartXAxis {
-          AxisMarks(values: .stride(by: .day, count: 5)) { value in
+          AxisMarks(values: .stride(by: .day, count: 5)) { _ in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
             AxisValueLabel(format: .dateTime.day())
               .font(.caption2)
@@ -266,9 +313,9 @@ struct CajaView: View {
     .glassEffect(in: RoundedRectangle(cornerRadius: 20))
   }
 
-  // MARK: - Desglose Efectivo vs Digital
+  // MARK: - Desglose
 
-  private func desgloseSection(vm: CajaViewModel) -> some View {
+  private var desgloseSection: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Desglose por método")
         .font(.headline)
@@ -278,15 +325,15 @@ struct CajaView: View {
           titulo: "Efectivo",
           systemImage: "banknote",
           color: .tlaneEarth,
-          monto: vm.totalEfectivoMes,
-          ratio: vm.efectivoRatio
+          monto: totalEfectivoMes,
+          ratio: efectivoRatio
         )
         metodoRow(
           titulo: "Digital",
           systemImage: "wave.3.right.circle.fill",
           color: .tlaneGreen,
-          monto: vm.totalDigitalMes,
-          ratio: 1 - vm.efectivoRatio
+          monto: totalDigitalMes,
+          ratio: 1 - efectivoRatio
         )
       }
     }
@@ -305,15 +352,14 @@ struct CajaView: View {
           .font(.title3)
           .foregroundStyle(color)
           .frame(width: 28)
-
         Text(titulo)
           .font(.subheadline.weight(.semibold))
-
         Spacer()
-
         Text(monto.formatted(.currency(code: "MXN")))
           .font(.subheadline.weight(.bold))
           .foregroundStyle(color)
+          .contentTransition(.numericText())
+          .animation(.easeInOut, value: monto)
       }
 
       GeometryReader { geo in
@@ -323,6 +369,7 @@ struct CajaView: View {
           RoundedRectangle(cornerRadius: 4)
             .fill(color)
             .frame(width: geo.size.width * ratio)
+            .animation(.easeInOut(duration: 0.4), value: ratio)
         }
       }
       .frame(height: 6)
@@ -338,27 +385,27 @@ struct CajaView: View {
 
   // MARK: - Operaciones
 
-  private func operacionesCard(vm: CajaViewModel) -> some View {
+  private var operacionesCard: some View {
     HStack(spacing: 14) {
       Image(systemName: "list.bullet.rectangle")
         .font(.title2)
         .foregroundStyle(Color.tlaneGreen)
-
       VStack(alignment: .leading, spacing: 2) {
-        Text("\(vm.operacionesMes)")
+        Text("\(operacionesMes)")
           .font(.title2.weight(.bold))
-        Text(vm.operacionesMes == 1 ? "operación este mes" : "operaciones este mes")
+          .contentTransition(.numericText())
+          .animation(.easeInOut, value: operacionesMes)
+        Text(operacionesMes == 1 ? "operación este mes" : "operaciones este mes")
           .font(.caption)
           .foregroundStyle(.secondary)
       }
-
       Spacer()
     }
     .padding(16)
     .glassEffect(in: RoundedRectangle(cornerRadius: 14))
   }
 
-  // MARK: - Placeholder histórico
+  // MARK: - Placeholder
 
   private var historicoPlaceholder: some View {
     VStack(spacing: 8) {
