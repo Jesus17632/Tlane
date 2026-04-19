@@ -2,12 +2,10 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-  @Environment(\.modelContext) private var context
+    @Environment(\.modelContext) private var context
+    @State private var insightsVM = InsightsViewModel()
+// MARK: - @Query reactivos (reemplazan HomeViewModel)
 
-  // MARK: - @Query reactivos (reemplazan HomeViewModel)
-
-  // Truco: inicializamos startOfDay una sola vez en init porque #Predicate
-  // requiere valores capturables en tiempo de compilación.
   @Query private var todaysSales: [Sale]
   @Query(sort: \Sale.date, order: .reverse) private var allSales: [Sale]
 
@@ -282,7 +280,7 @@ struct HomeView: View {
 
       Divider()
 
-      FallbackConsejeroCardView()
+    ConsejeroCardView(viewModel: insightsVM)
         .padding(12)
     }
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
