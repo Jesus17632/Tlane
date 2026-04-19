@@ -167,7 +167,7 @@ struct TlaneShortcuts: AppShortcutsProvider {
             phrases: [
                 "Agregar producto en \(.applicationName)",
                 "Nuevo producto en \(.applicationName)",
-                "Agrega \(\.$nombre) en \(.applicationName)"
+                "Añadir al inventario en \(.applicationName)"
             ],
             shortTitle: "Agregar producto",
             systemImageName: "plus.circle"
