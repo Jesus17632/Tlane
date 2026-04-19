@@ -227,93 +227,142 @@ private struct CameraPermissionDeniedView: View {
 // MARK: - Confirmation sheet
 
 private struct ConfirmationSheetView: View {
-  let category: String
-  let frame: UIImage
-  @Bindable var viewModel: InventoryViewModel
-  @FocusState private var nameFieldFocused: Bool
+    let category: String
+    let frame: UIImage
+    @Bindable var viewModel: InventoryViewModel
+    @FocusState private var nameFieldFocused: Bool
+    @State private var priceText: String = ""
+    @State private var quantityText: String = ""
 
-  private var isValid: Bool {
-    !viewModel.productName.trimmingCharacters(in: .whitespaces).isEmpty
-      && viewModel.productPrice > 0
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 18) {
-      header
-
-      VStack(alignment: .leading, spacing: 6) {
-        Text("Nombre de la pieza")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.secondary)
-        TextField("Ej: Huipil bordado", text: $viewModel.productName)
-          .textFieldStyle(.roundedBorder)
-          .focused($nameFieldFocused)
-      }
-
-      VStack(alignment: .leading, spacing: 6) {
-        Text("Precio")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(.secondary)
-        TextField("Precio", value: $viewModel.productPrice,
-                  format: .currency(code: "MXN"))
-          .textFieldStyle(.roundedBorder)
-          .keyboardType(.decimalPad)
-      }
-
-      Spacer(minLength: 4)
-
-      HStack(spacing: 12) {
-        Button("Cancelar") {
-          viewModel.resetToScanning()
-        }
-        .buttonStyle(.bordered)
-        .frame(maxWidth: .infinity)
-
-        Button {
-          viewModel.saveProduct(
-            category: category,
-            imageData: frame.jpegData(compressionQuality: 0.7)
-          )
-        } label: {
-          Text("Añadir al inventario")
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(.tlaneGreen)
-        .disabled(!isValid)
-      }
+    private var isValid: Bool {
+        !viewModel.productName.trimmingCharacters(in: .whitespaces).isEmpty
+            && viewModel.productPrice > Decimal(0)
+            && viewModel.productQuantity > 0
     }
-    .padding(20)
-    .onAppear {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-        nameFieldFocused = true
-      }
-    }
-  }
 
-  private var header: some View {
-    HStack(spacing: 14) {
-      Image(uiImage: frame)
-        .resizable()
-        .scaledToFill()
-        .frame(width: 72, height: 72)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            header
 
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: 6) {
-          Image(systemName: "sparkles")
-            .foregroundStyle(Color.tlaneGreen)
-          Text("Categoría detectada")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            // MARK: Nombre
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Nombre de la pieza")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                TextField("Ej: Huipil bordado", text: $viewModel.productName)
+                    .font(.system(.title3, design: .rounded))
+                    .textFieldStyle(.roundedBorder)
+                    .focused($nameFieldFocused)
+            }
+
+            // MARK: Precio y Cantidad (lado a lado)
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Precio")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    TextField("$0", text: $priceText)
+                        .font(.system(.title3, design: .rounded, weight: .medium))
+                        .textFieldStyle(.roundedBorder)
+                        .keyboardType(.numberPad)
+                        .onChange(of: priceText) { _, newValue in
+                            if !newValue.hasPrefix("$") {
+                                priceText = "$" + newValue.filter { $0.isNumber }
+                            } else {
+                                let digits = newValue.dropFirst().filter { $0.isNumber }
+                                priceText = "$" + digits
+                            }
+                            let digits = String(priceText.dropFirst())
+                            let decimal = NSDecimalNumber(string: digits).decimalValue
+                            viewModel.productPrice = decimal
+                        }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Cantidad")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    TextField("0", text: $quantityText)
+                        .font(.system(.title3, design: .rounded, weight: .medium))
+                        .textFieldStyle(.roundedBorder)
+                        .keyboardType(.numberPad)
+                        .onChange(of: quantityText) { _, newValue in
+                            let digits = newValue.filter { $0.isNumber }
+                            quantityText = digits
+                            viewModel.productQuantity = Int(digits) ?? 0
+                        }
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            // MARK: Botones
+            HStack(spacing: 12) {
+                Button("Cancelar") {
+                    viewModel.resetToScanning()
+                }
+                .font(.system(.headline, design: .rounded, weight: .medium))
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+
+                Button {
+                    viewModel.saveProduct(
+                        category: category,
+                        imageData: frame.jpegData(compressionQuality: 0.7)
+                    )
+                } label: {
+                    Text("Añadir al inventario")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.tlaneGreen)
+                .disabled(!isValid)
+            }
         }
-        Text(category.capitalized)
-          .font(.title2.weight(.bold))
-          .foregroundStyle(Color.tlaneGreen)
-      }
-      Spacer()
+        .padding(20)
+        .onAppear {
+            if viewModel.productPrice > Decimal(0) {
+                let intValue = NSDecimalNumber(decimal: viewModel.productPrice).intValue
+                priceText = "$\(intValue)"
+            }
+            if viewModel.productQuantity > 0 {
+                quantityText = "\(viewModel.productQuantity)"
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                nameFieldFocused = true
+            }
+        }
     }
-  }
+
+    // MARK: - Header
+    private var header: some View {
+        HStack(spacing: 14) {
+            Image(uiImage: frame)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 100, height: 100)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.tlaneGreen)
+                    Text("Categoría detectada")
+                        .font(.system(.footnote, design: .rounded, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Text(category.capitalized)
+                    .font(.system(.title, design: .rounded, weight: .bold))
+                    .foregroundStyle(Color.tlaneGreen)
+            }
+            Spacer()
+        }
+    }
 }
 
 #Preview {
@@ -322,3 +371,4 @@ private struct ConfirmationSheetView: View {
   }
   .modelContainer(AppContainer.preview)
 }
+
