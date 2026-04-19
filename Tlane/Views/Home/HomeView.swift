@@ -106,9 +106,7 @@ struct HomeView: View {
       CajaGrandeView()
     }
     .sheet(isPresented: $mostrarCobrar) {
-      CobrarSheetView { monto, tipo in
-        // viewModel?.registrarVenta(monto: monto, metodo: tipo.rawValue)
-      }
+      CobrarSheetView(onVentaRegistrada: { _, _ in })
     }
     .sheet(isPresented: $mostrarPagar) {
       PagarSheetView()
@@ -243,16 +241,34 @@ struct HomeView: View {
     .glassEffect(in: RoundedRectangle(cornerRadius: 16))
   }
 
+  // MARK: - Fila de venta — cobros en verde, pagos en rojo
   private func ventaRow(sale: Sale) -> some View {
-    HStack(spacing: 12) {
-      Image(systemName: sale.paymentMethod.systemImage)
-        .font(.title3)
-        .foregroundStyle(Color.tlaneGreen)
-        .frame(width: 32)
+    let esCobro = sale.amount > 0
+    let color: Color = esCobro ? Color.tlaneGreen : .red
+
+    return HStack(spacing: 12) {
+      // Ícono
+      ZStack {
+        Circle()
+          .fill(color.opacity(0.12))
+          .frame(width: 38, height: 38)
+        Image(systemName: esCobro
+              ? sale.paymentMethod.systemImage
+              : "arrow.up.circle.fill")
+          .font(.body.weight(.semibold))
+          .foregroundStyle(color)
+      }
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(sale.amount.formatted(.currency(code: "MXN")))
-          .font(.body.weight(.semibold))
+        // Productos vendidos si existen, si no el método de pago
+        if !sale.items.isEmpty {
+          Text(sale.items.map { $0.productName }.joined(separator: ", "))
+            .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+        } else {
+          Text(sale.paymentMethod.rawValue)
+            .font(.subheadline.weight(.medium))
+        }
         Text(sale.paymentMethod.rawValue)
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -260,9 +276,16 @@ struct HomeView: View {
 
       Spacer()
 
-      Text(sale.date.formatted(date: .omitted, time: .shortened))
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
+      VStack(alignment: .trailing, spacing: 2) {
+        // Monto con signo
+        Text((esCobro ? "+" : "-") + sale.amount.formatted(.currency(code: "MXN")))
+          .font(.body.weight(.bold))
+          .foregroundStyle(color)
+
+        Text(sale.date.formatted(date: .omitted, time: .shortened))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
     .padding(12)
     .glassEffect(in: RoundedRectangle(cornerRadius: 14))
