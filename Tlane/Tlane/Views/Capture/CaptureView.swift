@@ -5,90 +5,103 @@ struct InventoryView: View {
     @Binding var selectedTab: AppTab
   @Environment(\.modelContext) private var context
   @State private var viewModel: InventoryViewModel?
+    @State private var showConfirmationSheet: Bool = false
+    
+    var body: some View {
+      ZStack {
+        Color.black.ignoresSafeArea()
 
-var body: some View {
-        ZStack {
+        if let viewModel {
+          content(vm: viewModel)
+        } else {
+          ProgressView()
+            .tint(.white)
+        }
+      }
+      .toolbar(.hidden, for: .navigationBar)
+      .task {
+        if viewModel == nil {
+          viewModel = InventoryViewModel(context: context)
+        }
+        if case .requestingPermission = viewModel?.state {
+          await viewModel?.requestCameraPermission()
+        }
+      }
+      // Cuando el state cambia a .detected, ABRIMOS el sheet manualmente
+      .onChange(of: observableStateKey) { _, _ in
+        if case .detected = observableState {
+          showConfirmationSheet = true
+        } else {
+          showConfirmationSheet = false
+        }
+      }
+      .onChange(of: selectedTab) { _, newTab in
+        guard let vm = viewModel else { return }
+        if newTab == .scan {
+          switch vm.state {
+          case .detected, .saving:
+            showConfirmationSheet = false
+            vm.resetToScanning()
+          case .scanning:
+            vm.startCamera()
+          case .requestingPermission, .denied:
+            break
+          }
+        } else {
+          showConfirmationSheet = false  // cerrar sheet primero
+          vm.stopCamera()
+          if case .detected = vm.state {
+            vm.cancelPendingDetection()
+          }
+          if case .saving = vm.state {
+            vm.cancelPendingDetection()
+          }
+        }
+      }
+      .onDisappear {
+        viewModel?.stopCamera()
+      }
+    }
+
+    /// Helper para observar el state del viewModel (si es nil, devuelve .scanning dummy)
+    private var observableState: CaptureState {
+      viewModel?.state ?? .scanning
+    }
+
+    /// String key to observe state changes without requiring Equatable conformance on CaptureState
+    private var observableStateKey: String {
+      String(describing: observableState)
+    }
+
+    @ViewBuilder
+    private func content(vm: InventoryViewModel) -> some View {
+      ZStack {
+        if selectedTab == .scan {
+          CameraPreviewView(session: vm.cameraSession)
+            .ignoresSafeArea()
+        } else {
           Color.black.ignoresSafeArea()
+        }
 
-          if let viewModel {
-            content(vm: viewModel)
-          } else {
-            ProgressView()
-              .tint(.white)
-          }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .task {
-          if viewModel == nil {
-            viewModel = InventoryViewModel(context: context)
-          }
-          if case .requestingPermission = viewModel?.state {
-            await viewModel?.requestCameraPermission()
-          }
-        }
-        // ← NUEVO: reacciona al cambio de tab. Esto SÍ se dispara confiablemente
-        //   cuando el usuario navega entre tabs, a diferencia de onAppear/onDisappear.
-        .onChange(of: selectedTab) { _, newTab in
-          guard let vm = viewModel else { return }
-          if newTab == .scan {
-            // Entramos al tab escáner: reanudar
-            switch vm.state {
-            case .detected, .saving:
-              vm.resetToScanning()   // limpia estado sucio y arranca cámara
-            case .scanning:
-              vm.startCamera()
-            case .requestingPermission, .denied:
-              break
-            }
-          } else {
-            // Salimos del tab escáner: apagar cámara
-            vm.stopCamera()
-          }
-        }
-        // Mantenemos onDisappear como fallback para navegación push
-        // (si alguna vez empujas otra view sobre el escáner).
-        .onDisappear {
-          viewModel?.stopCamera()
+        switch vm.state {
+        case .requestingPermission:
+          permissionLoader
+        case .denied:
+          CameraPermissionDeniedView()
+        case .scanning, .detected, .saving:
+          scanningOverlay(vm: vm)
         }
       }
-
-  @ViewBuilder
-  private func content(vm: InventoryViewModel) -> some View {
-    ZStack {
-      CameraPreviewView(session: vm.cameraSession)
-        .ignoresSafeArea()
-
-      switch vm.state {
-      case .requestingPermission:
-        permissionLoader
-      case .denied:
-        CameraPermissionDeniedView()
-      case .scanning, .detected, .saving:
-        scanningOverlay(vm: vm)
+      .floatingBottomSheet(isPresented: $showConfirmationSheet) {
+        if case .detected(let category, let frame) = vm.state {
+          ConfirmationSheetView(
+            category: category,
+            frame: frame,
+            viewModel: vm
+          )
+        }
       }
     }
-    .floatingBottomSheet(isPresented: sheetBinding(vm: vm)) {
-      if case .detected(let category, let frame) = vm.state {
-        ConfirmationSheetView(
-          category: category,
-          frame: frame,
-          viewModel: vm
-        )
-      }
-    }
-  }
-
-  private func sheetBinding(vm: InventoryViewModel) -> Binding<Bool> {
-    Binding(
-      get: {
-        if case .detected = vm.state { return true }
-        return false
-      },
-      set: { newValue in
-        if !newValue { vm.resetToScanning() }
-      }
-    )
-  }
 
   // MARK: - Overlays
 
